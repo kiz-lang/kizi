@@ -1,5 +1,5 @@
 set_project("kiz")
-set_version("0.7.11")
+set_version("0.7.23")
 set_languages("c++20")
 
 target("version")
