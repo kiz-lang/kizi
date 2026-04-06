@@ -5,7 +5,6 @@ set_languages("c++20")
 rule("version")
     set_extensions(".in")
     on_build_file(function (target, source_file, opt)
-        print("compiling")
         -- 读取文件内容
         local content = io.readfile(source_file)
         if content then
