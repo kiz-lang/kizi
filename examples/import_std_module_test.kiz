@@ -1,2 +1,2 @@
 import Hello
-Hello()
+Hello.hello()
