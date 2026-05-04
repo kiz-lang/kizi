@@ -1,0 +1,4 @@
+fn foo(a, b)
+    a+b
+end
+print(foo(1, 5))

@@ -2,4 +2,8 @@ for i in Range(1, 2, 10)
     print(i)
 end
 
+for i in 1 ... 4
+    print(i)
+end
+
 print(List(Range(10)))

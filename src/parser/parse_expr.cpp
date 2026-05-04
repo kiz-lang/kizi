@@ -145,7 +145,20 @@ std::unique_ptr<Expr> Parser::parse_factor() {
     }
 
     while (true) {
-        if (curr_token().type == TokenType::Dot) {
+        if (curr_token().type == TokenType::TripleDot) {
+            auto tok = curr_token();
+
+            skip_token("...");
+            auto end_range = parse_primary();
+            std::vector<std::unique_ptr<Expr>> args;
+            args.push_back(std::move(node));
+            args.push_back(std::move(end_range));
+            node = std::make_unique<CallExpr>(tok.pos,
+                std::make_unique<IdentifierExpr>(tok.pos, "Range"),
+                std::move(args)
+            );
+        }
+        else if (curr_token().type == TokenType::Dot) {
             auto tok = curr_token();
 
             skip_token(".");

@@ -205,6 +205,15 @@ std::unique_ptr<Stmt> Parser::parse_stmt() {
         // 解析函数体（无大括号，用end结尾）
         skip_start_of_block();  // 跳过参数后的换行
         auto func_body = parse_block();
+        if (auto& stmt = func_body->statements;
+            !stmt.empty()
+        ) {
+            if (auto expr_stmt = dynamic_cast<ExprStmt*>(stmt[stmt.size() - 1].get())) {
+                func_body->statements[stmt.size() - 1] = std::make_unique<ReturnStmt>(
+                    expr_stmt->pos,  std::move(expr_stmt->expr)
+                );
+            }
+        }
         skip_end();
 
         // 生成函数定义语句节点

@@ -17,7 +17,7 @@
 
 namespace model {
 
-class Gc {
+class GC {
 public:
     inline static std::unordered_set<Object*> obj_set;
     inline static std::unordered_set<Object*> marked;
@@ -94,7 +94,7 @@ public:
     static void sweep() {
         std::vector<Object*> garbage;
         for (auto obj : obj_set) {
-            if (!marked.count(obj) && !obj->is_important) {
+            if (!marked.contains(obj) && !obj->is_important) {
                 garbage.push_back(obj);
             }
         }
