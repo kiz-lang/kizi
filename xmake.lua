@@ -1,5 +1,5 @@
 set_project("kiz")
-set_version("0.7.23")
+set_version("0.8.0")
 set_languages("c++20")
 
 rule("version")
@@ -10,9 +10,9 @@ rule("version")
         if content then
             -- 进行文本替换，例如替换版本号
             content = content:gsub("@KIZ_VERSION_MAJOR@", "0")
-            content = content:gsub("@KIZ_VERSION_MINOR@", "7")
-            content = content:gsub("@KIZ_VERSION_PATCH@", "11")
-            content = content:gsub("@KIZ_VERSION@", "0.7.11")
+            content = content:gsub("@KIZ_VERSION_MINOR@", "8")
+            content = content:gsub("@KIZ_VERSION_PATCH@", "0")
+            content = content:gsub("@KIZ_VERSION@", "0.8.0")
             -- 将新内容写回文件（或写入新位置）
             local target_file = path.join("cmake-build-debug/include", string.sub(path.filename(source_file), 1, #path.filename(source_file) - 3)) -- 去掉 .in 后缀
             io.writefile(target_file, content)
