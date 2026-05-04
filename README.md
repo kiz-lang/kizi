@@ -1,9 +1,9 @@
 <div align="center">
 <img src="https://user3082.cn.imgto.link/public/20260225/segment.svg" width="250" alt="kiz logo">
-<h1> kiz v0.7.33 🎉</h1>
+<h1> kiz v0.8.0 🎉</h1>
 </div>
 
-📌 **现状: 修复bug与预发布正式版本(2026.1)...**
+📌 **现状: 提速改造, 修复bug与预发布正式版本(2026.1)...**
 
 ## 语言核心定位
 kiz-lang 是一门 **语法优雅**、面向对象（原型链模型）、动态类型(鸭子类型)** 的轻量化脚本语言
