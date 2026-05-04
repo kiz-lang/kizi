@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 
 project(kiz
-        VERSION 0.7.23
+        VERSION 0.8.0
         LANGUAGES CXX)
 
 add_compile_options(-Ofast)
@@ -14,8 +14,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # 版本号定义
 set(KIZ_VERSION_MAJOR 0)
-set(KIZ_VERSION_MINOR 7)
-set(KIZ_VERSION_PATCH 23)
+set(KIZ_VERSION_MINOR 8)
+set(KIZ_VERSION_PATCH 0)
 set(KIZ_VERSION "${KIZ_VERSION_MAJOR}.${KIZ_VERSION_MINOR}.${KIZ_VERSION_PATCH}")
 
 # 配置版本头文件（生成到构建目录）
