@@ -1,6 +1,6 @@
 <div align="center">
 <img src="https://user3082.cn.imgto.link/public/20260225/segment.svg" width="250" alt="kiz logo">
-<h1> kiz v0.7.23 🎉</h1>
+<h1> kiz v0.7.33 🎉</h1>
 </div>
 
 📌 **现状: 修复bug与预发布正式版本(2026.1)...**
