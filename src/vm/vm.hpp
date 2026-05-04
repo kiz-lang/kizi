@@ -45,9 +45,9 @@ enum class Opcode : uint8_t;
 
 struct Instruction {
     Opcode opc;
-    std::vector<size_t> opn_list;
+    size_t opn;
     err::PositionInfo pos{};
-    Instruction(Opcode o, std::vector<size_t> ol, err::PositionInfo& p) : opc(o), opn_list(std::move(ol)), pos(p) {}
+    Instruction(Opcode o, size_t opn, err::PositionInfo& p) : opc(o), opn(opn), pos(p) {}
 };
 
 struct CallFrame {

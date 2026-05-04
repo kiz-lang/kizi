@@ -169,12 +169,12 @@ void Vm::execute_unit(const Instruction& instruction) {
     }
 
     case Opcode::MAKE_LIST: {
-        make_list(instruction.opn_list[0]);
+        make_list(instruction.opn);
         break;
     }
 
     case Opcode::MAKE_DICT: {
-        make_dict(instruction.opn_list[0]);
+        make_dict(instruction.opn);
         break;
     }
 
@@ -241,7 +241,7 @@ void Vm::execute_unit(const Instruction& instruction) {
         // 弹出栈顶-1元素 : 参数列表
         auto args_obj = get_and_pop_stack_top();
 
-        std::string attr_name = get_attr_name_by_idx(instruction.opn_list[0]);
+        std::string attr_name = get_attr_name_by_idx(instruction.opn);
 
         auto func_obj = get_attr(obj.get(), attr_name);
 
@@ -252,7 +252,7 @@ void Vm::execute_unit(const Instruction& instruction) {
 
     case Opcode::GET_ATTR: {
         auto obj = get_and_pop_stack_top();
-         std::string attr_name = get_attr_name_by_idx(instruction.opn_list[0]);
+         std::string attr_name = get_attr_name_by_idx(instruction.opn);
 
         model::Object* attr_val = get_attr(obj.get(), attr_name);
         push_to_stack(attr_val);
@@ -262,7 +262,7 @@ void Vm::execute_unit(const Instruction& instruction) {
     case Opcode::SET_ATTR: {
         auto attr_val = get_and_pop_stack_top();
         auto obj = get_and_pop_stack_top();
-        std::string attr_name = get_attr_name_by_idx(instruction.opn_list[0]);
+        std::string attr_name = get_attr_name_by_idx(instruction.opn);
 
         if (std::ranges::find(builtins, obj.get()) != std::ranges::end(builtins)) {
             throw NativeFuncError("SetattrError", "Cannot reset or add attribute for builtin object");
@@ -297,20 +297,20 @@ void Vm::execute_unit(const Instruction& instruction) {
     }
 
     case Opcode::LOAD_VAR: {
-        auto val = op_stack[call_stack.back()->bp + instruction.opn_list[0]];
+        auto val = op_stack[call_stack.back()->bp + instruction.opn];
         push_to_stack(val);
         break;
     }
 
     case Opcode::LOAD_CONST: {
-        size_t const_idx = instruction.opn_list[0];
+        size_t const_idx = instruction.opn;
         model::Object* const_val = const_pool[const_idx];
         push_to_stack(const_val);
         break;
     }
 
     case Opcode::LOAD_BUILTINS: {
-        auto obj = builtins[ instruction.opn_list[0] ];
+        auto obj = builtins[ instruction.opn ];
         push_to_stack(obj);
         break;
     }
@@ -318,14 +318,14 @@ void Vm::execute_unit(const Instruction& instruction) {
     case Opcode::LOAD_FREE_VAR: {
         auto func = dynamic_cast<model::Function*>(call_stack.back()->owner);
         assert(func != nullptr);
-        push_to_stack(func->free_vars[ instruction.opn_list[0] ]);
+        push_to_stack(func->free_vars[ instruction.opn ]);
         break;
     }
 
     case Opcode::SET_LOCAL: {
         auto value = get_and_pop_stack_top();
 
-        size_t offset = call_stack.back()->bp + instruction.opn_list[0];
+        size_t offset = call_stack.back()->bp + instruction.opn;
         auto new_val = model::copy_if_mutable(value.get());
         new_val->make_ref();
 
@@ -338,7 +338,7 @@ void Vm::execute_unit(const Instruction& instruction) {
 
 
     case Opcode::SET_GLOBAL: {
-        auto offset = instruction.opn_list[0];
+        auto offset = instruction.opn;
         auto value = get_and_pop_stack_top();
 
         auto new_val = model::copy_if_mutable(value.get());
@@ -352,7 +352,7 @@ void Vm::execute_unit(const Instruction& instruction) {
     }
 
     case Opcode::SET_NONLOCAL: {
-        auto idx_of_upvalue = instruction.opn_list[0];
+        auto idx_of_upvalue = instruction.opn;
         auto upvalue = call_stack.back()->code_object->upvalues[ idx_of_upvalue ];
         auto frame = call_stack[ call_stack.size() - upvalue.distance_from_curr - 1]; // 区别于CREATE_CLOSURE指令, 这里在函数中要多减一
         size_t loc_based = frame->bp;
@@ -395,7 +395,7 @@ void Vm::execute_unit(const Instruction& instruction) {
     }
 
     case Opcode::JUMP: {
-        size_t target_pc = instruction.opn_list[0];
+        size_t target_pc = instruction.opn;
         call_stack.back()->pc = target_pc;
         break;
     }
@@ -404,7 +404,7 @@ void Vm::execute_unit(const Instruction& instruction) {
         auto cond = get_and_pop_stack_top();
         if (! is_true(cond.get())) {
             // 跳转逻辑
-            call_stack.back()->pc = instruction.opn_list[0];
+            call_stack.back()->pc = instruction.opn;
         } else {
             call_stack.back()->pc++;
         }
@@ -426,7 +426,7 @@ void Vm::execute_unit(const Instruction& instruction) {
     }
 
     case Opcode::IMPORT: {
-        std::string module_path = get_attr_name_by_idx(instruction.opn_list[0]);
+        std::string module_path = get_attr_name_by_idx(instruction.opn);
         handle_import(module_path);
         break;
     }
@@ -456,7 +456,7 @@ void Vm::execute_unit(const Instruction& instruction) {
 
     case Opcode::JUMP_IF_FINISH_ITER: {
         auto obj = get_and_pop_stack_top();
-        size_t target_pc = instruction.opn_list[0];
+        size_t target_pc = instruction.opn;
         if (obj.get() == model::stop_iter_signal) {
             call_stack.back()->pc = target_pc;
             return;

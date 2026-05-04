@@ -22,7 +22,7 @@ void IRGenerator::gen_expr(Expr* expr) {
         size_t const_idx = get_or_add_const(const_obj);
         code_chunks.back().code_list.emplace_back(
             Opcode::LOAD_CONST,
-            std::vector{const_idx},
+            const_idx,
             expr->pos
         );
         break;
@@ -33,7 +33,7 @@ void IRGenerator::gen_expr(Expr* expr) {
         size_t const_idx = get_or_add_const(const_obj);
         code_chunks.back().code_list.emplace_back(
             Opcode::LOAD_CONST,
-            std::vector{const_idx},
+            const_idx,
             expr->pos
         );
         break;
@@ -44,7 +44,7 @@ void IRGenerator::gen_expr(Expr* expr) {
         size_t const_idx = get_or_add_const(const_obj);
         code_chunks.back().code_list.emplace_back(
             Opcode::LOAD_CONST,
-            std::vector{const_idx},
+            const_idx,
             expr->pos
         );
         break;
@@ -57,7 +57,7 @@ void IRGenerator::gen_expr(Expr* expr) {
             size_t name_idx = std::distance(code_chunks.back().var_names.begin(), name_idx_it);
             code_chunks.back().code_list.emplace_back(
                 Opcode::LOAD_VAR,
-                std::vector{name_idx},
+                name_idx,
                 expr->pos
             );
         } else {
@@ -67,7 +67,7 @@ void IRGenerator::gen_expr(Expr* expr) {
                 size_t name_idx = std::distance(code_chunks.back().free_names.begin(), may_be_free_it);
                 code_chunks.back().code_list.emplace_back(
                     Opcode::LOAD_FREE_VAR,
-                    std::vector{name_idx},
+                    name_idx,
                     expr->pos
                 );
                 break;
@@ -90,7 +90,7 @@ void IRGenerator::gen_expr(Expr* expr) {
                 if (builtin_it != Vm::builtin_names.end()) {
                     code_chunks.back().code_list.emplace_back(
                         Opcode::LOAD_BUILTINS,
-                        std::vector{static_cast<size_t>(builtin_it - Vm::builtin_names.begin())},
+                        static_cast<size_t>(builtin_it - Vm::builtin_names.begin()),
                         expr->pos
                     );
                     break;
@@ -101,7 +101,7 @@ void IRGenerator::gen_expr(Expr* expr) {
                 code_chunks.back().upvalues.push_back({i, name_idx});
                 code_chunks.back().code_list.emplace_back(
                     Opcode::LOAD_FREE_VAR,
-                    std::vector{code_chunks.back().upvalues.size() - 1},
+                    code_chunks.back().upvalues.size() - 1,
                     expr->pos
                 );
             }
@@ -114,26 +114,26 @@ void IRGenerator::gen_expr(Expr* expr) {
         if (bin_expr->op == "and"){
             gen_expr(bin_expr->left.get());  // 左操作数
 
-            code_chunks.back().code_list.emplace_back(Opcode::COPY_TOP, std::vector<size_t>{}, expr->pos);
+            code_chunks.back().code_list.emplace_back(Opcode::COPY_TOP, 0, expr->pos);
 
             size_t jump_if_false_idx = code_chunks.back().code_list.size();
-            code_chunks.back().code_list.emplace_back(Opcode::JUMP_IF_FALSE, std::vector<size_t>{0}, expr->pos);
+            code_chunks.back().code_list.emplace_back(Opcode::JUMP_IF_FALSE, 0, expr->pos);
 
             gen_expr(bin_expr->right.get()); // 右操作数（栈中顺序：左在下，右在上）
-            code_chunks.back().code_list[jump_if_false_idx].opn_list[0] = code_chunks.back().code_list.size();
+            code_chunks.back().code_list[jump_if_false_idx].opn = code_chunks.back().code_list.size();
             break;
         }
         if (bin_expr->op == "or") {
             gen_expr(bin_expr->left.get());  // 左操作数
 
-            code_chunks.back().code_list.emplace_back(Opcode::COPY_TOP, std::vector<size_t>{}, expr->pos);
+            code_chunks.back().code_list.emplace_back(Opcode::COPY_TOP, 0, expr->pos);
 
-            code_chunks.back().code_list.emplace_back(Opcode::OP_NOT, std::vector<size_t>{}, expr->pos);
+            code_chunks.back().code_list.emplace_back(Opcode::OP_NOT, 0, expr->pos);
             size_t jump_if_false_idx = code_chunks.back().code_list.size();
-            code_chunks.back().code_list.emplace_back(Opcode::JUMP_IF_FALSE, std::vector<size_t>{0}, expr->pos);
+            code_chunks.back().code_list.emplace_back(Opcode::JUMP_IF_FALSE, 0, expr->pos);
 
             gen_expr(bin_expr->right.get()); // 右操作数（栈中顺序：左在下，右在上）
-            code_chunks.back().code_list[jump_if_false_idx].opn_list[0] = code_chunks.back().code_list.size();
+            code_chunks.back().code_list[jump_if_false_idx].opn = code_chunks.back().code_list.size();
             break;
         }
         gen_expr(bin_expr->left.get());  // 左操作数
@@ -163,7 +163,7 @@ void IRGenerator::gen_expr(Expr* expr) {
 
         code_chunks.back().code_list.emplace_back(
             opc,
-            std::vector<size_t>{},
+            0,
             expr->pos
         );
         break;
@@ -181,7 +181,7 @@ void IRGenerator::gen_expr(Expr* expr) {
 
         code_chunks.back().code_list.emplace_back(
             opc,
-            std::vector<size_t>{},
+            0,
             expr->pos
         );
         break;
@@ -201,7 +201,7 @@ void IRGenerator::gen_expr(Expr* expr) {
         // 生成 OP_MAKE_LIST 指令
         code_chunks.back().code_list.emplace_back(
             Opcode::MAKE_LIST,
-            std::vector{list_expr->elements.size()},
+            list_expr->elements.size(),
             expr->pos
        );
         break;
@@ -213,7 +213,7 @@ void IRGenerator::gen_expr(Expr* expr) {
         size_t name_idx = get_or_add_name(code_chunks.back().attr_names, get_mem->child->name);
         code_chunks.back().code_list.emplace_back(
             Opcode::GET_ATTR,
-            std::vector<size_t>{name_idx},
+            name_idx,
             expr->pos
         );
         break;
@@ -229,7 +229,7 @@ void IRGenerator::gen_expr(Expr* expr) {
         // 生成 OP_MAKE_LIST 指令：将栈顶 arg_count 个元素打包成参数列表，压回栈
         code_chunks.back().code_list.emplace_back(
             Opcode::MAKE_LIST,
-            std::vector{arg_count},
+            arg_count,
             get_mem_expr->pos
         );
 
@@ -237,7 +237,7 @@ void IRGenerator::gen_expr(Expr* expr) {
 
         code_chunks.back().code_list.emplace_back(
             Opcode::GET_ITEM,
-            std::vector<size_t>{},
+            0,
             get_mem_expr->pos
         );
         break;
@@ -261,12 +261,12 @@ void IRGenerator::gen_expr(Expr* expr) {
             const size_t nil_idx = get_or_add_const(nil);
             code_chunks.back().code_list.emplace_back(
                 Opcode::LOAD_CONST,
-                std::vector{nil_idx},
+                nil_idx,
                 expr->pos
             );
             code_chunks.back().code_list.emplace_back(
                 Opcode::RET,
-                std::vector<size_t>{},
+                0,
                 expr->pos
             );
         }
@@ -314,12 +314,12 @@ void IRGenerator::gen_expr(Expr* expr) {
         const size_t fn_const_idx = get_or_add_const(lambda_fn);
         code_chunks.back().code_list.emplace_back(
             Opcode::LOAD_CONST,
-            std::vector{fn_const_idx},
+            fn_const_idx,
             expr->pos
         );
         code_chunks.back().code_list.emplace_back(
             Opcode::CREATE_CLOSURE,
-            std::vector<size_t>{},
+            0,
             expr->pos
         );
         break;
@@ -329,7 +329,7 @@ void IRGenerator::gen_expr(Expr* expr) {
         const size_t nil_idx = get_or_add_const(nil);
         code_chunks.back().code_list.emplace_back(
             Opcode::LOAD_CONST,
-            std::vector{nil_idx},
+            nil_idx,
             expr->pos
         );
         break;
@@ -341,7 +341,7 @@ void IRGenerator::gen_expr(Expr* expr) {
         const size_t bool_idx = get_or_add_const(bool_obj);
         code_chunks.back().code_list.emplace_back(
             Opcode::LOAD_CONST,
-            std::vector{bool_idx},
+            bool_idx,
             expr->pos
         );
         break;
@@ -363,7 +363,7 @@ void IRGenerator::gen_fn_call(CallExpr* call_expr) {
     // 生成 OP_MAKE_LIST 指令：将栈顶 arg_count 个元素打包成参数列表，压回栈
     code_chunks.back().code_list.emplace_back(
         Opcode::MAKE_LIST,
-        std::vector<size_t>{arg_count},
+        arg_count,
         call_expr->pos
     );
 
@@ -378,7 +378,7 @@ void IRGenerator::gen_fn_call(CallExpr* call_expr) {
         // 生成 CALL_METHOD 指令：操作数为 方法名索引 + 参数个数（用于校验）
         code_chunks.back().code_list.emplace_back(
             Opcode::CALL_METHOD,
-            std::vector{method_name_idx, arg_count},
+            method_name_idx,
             call_expr->pos
         );
     } else {
@@ -386,7 +386,7 @@ void IRGenerator::gen_fn_call(CallExpr* call_expr) {
         gen_expr(call_expr->callee.get());
         code_chunks.back().code_list.emplace_back(
             Opcode::CALL,
-            std::vector{arg_count},
+            arg_count,
             call_expr->pos
         );
     }
@@ -403,7 +403,7 @@ void IRGenerator::gen_dict(DictExpr* expr) {
     size_t dict_size = expr->elements.size();
     code_chunks.back().code_list.emplace_back(
         Opcode::MAKE_DICT,
-        std::vector{dict_size},
+        dict_size,
         expr->pos
     );
 }

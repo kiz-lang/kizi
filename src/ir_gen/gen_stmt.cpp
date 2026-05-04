@@ -40,7 +40,7 @@ void IRGenerator::gen_block(const BlockStmt* block) {
 
             code_chunks.back().code_list.emplace_back(
                 Opcode::IMPORT,
-                std::vector{name_idx},
+                name_idx,
                 stmt->pos
             );
 
@@ -48,7 +48,7 @@ void IRGenerator::gen_block(const BlockStmt* block) {
 
             code_chunks.back().code_list.emplace_back(
                 Opcode::SET_LOCAL,
-                std::vector{local_name_idx},
+                local_name_idx,
                 stmt->pos
             );
             break;
@@ -89,7 +89,7 @@ void IRGenerator::gen_block(const BlockStmt* block) {
 
             code_chunks.back().code_list.emplace_back(
                 Opcode::SET_LOCAL,
-                std::vector{name_idx},
+                name_idx,
                 stmt->pos
             );
             break;
@@ -105,7 +105,7 @@ void IRGenerator::gen_block(const BlockStmt* block) {
                 size_t name_idx = std::distance(code_chunks.back().free_names.begin(), may_be_free_it);
                 code_chunks.back().code_list.emplace_back(
                     Opcode::SET_NONLOCAL,
-                    std::vector{name_idx},
+                    name_idx,
                     stmt->pos
                 );
                 break;
@@ -128,7 +128,7 @@ void IRGenerator::gen_block(const BlockStmt* block) {
                 code_chunks.back().upvalues.push_back({i, name_idx});
                 code_chunks.back().code_list.emplace_back(
                     Opcode::SET_NONLOCAL,
-                    std::vector{code_chunks.back().upvalues.size() - 1},
+                    code_chunks.back().upvalues.size() - 1,
                     stmt->pos
                 );
             } else {
@@ -146,7 +146,7 @@ void IRGenerator::gen_block(const BlockStmt* block) {
                 gen_expr(var_decl->expr.get());
                 code_chunks.back().code_list.emplace_back(
                     Opcode::SET_GLOBAL,
-                    std::vector{name_idx},
+                    name_idx,
                     stmt->pos
                 );
                 break;
@@ -187,13 +187,13 @@ void IRGenerator::gen_block(const BlockStmt* block) {
                 const size_t const_idx = get_or_add_const(nil);
                 code_chunks.back().code_list.emplace_back(
                     Opcode::LOAD_CONST,
-                    std::vector<size_t>{const_idx},
+                    const_idx,
                     stmt->pos
                 );
             }
             code_chunks.back().code_list.emplace_back(
                 Opcode::RET,
-                std::vector<size_t>{},
+                0,
                 stmt->pos
             );
             break;
@@ -203,7 +203,7 @@ void IRGenerator::gen_block(const BlockStmt* block) {
             gen_expr(throw_stmt->expr.get());
             code_chunks.back().code_list.emplace_back(
                 Opcode::THROW,
-                std::vector<size_t>{},
+                0,
                 stmt->pos
             );
             break;
@@ -215,7 +215,7 @@ void IRGenerator::gen_block(const BlockStmt* block) {
             code_chunks.back().loop_info_stack.back().break_pos.push_back(code_chunks.back().code_list.size());
             code_chunks.back().code_list.emplace_back(
                 Opcode::JUMP,
-                std::vector<size_t>{0},
+                0,
                 stmt->pos
             );
             break;
@@ -231,7 +231,7 @@ void IRGenerator::gen_block(const BlockStmt* block) {
             code_chunks.back().loop_info_stack.back().continue_pos.push_back(code_chunks.back().code_list.size());
             code_chunks.back().code_list.emplace_back(
                 Opcode::JUMP,
-                std::vector<size_t>{0},
+                0,
                 stmt->pos
             );
             break;
@@ -247,7 +247,7 @@ void IRGenerator::gen_block(const BlockStmt* block) {
             size_t name_idx = get_or_add_name(code_chunks.back().attr_names, get_mem->child->name);
             code_chunks.back().code_list.emplace_back(
                 Opcode::SET_ATTR,
-                std::vector<size_t>{name_idx},
+                name_idx,
                 stmt->pos
             );
             break;
@@ -262,7 +262,7 @@ void IRGenerator::gen_block(const BlockStmt* block) {
 
             code_chunks.back().code_list.emplace_back(
                 Opcode::SET_ITEM,
-                std::vector<size_t>{},
+                0,
                 stmt->pos
             );
             break;
@@ -282,7 +282,7 @@ void IRGenerator::gen_if(IfStmt* if_stmt) {
     size_t jump_if_false_idx = code_chunks.back().code_list.size();
     code_chunks.back().code_list.emplace_back(
         Opcode::JUMP_IF_FALSE,
-        std::vector<size_t>{0}, // 占位目标索引
+        0, // 占位目标索引
         if_stmt->pos
     );
 
@@ -293,12 +293,12 @@ void IRGenerator::gen_if(IfStmt* if_stmt) {
     size_t jump_else_idx = code_chunks.back().code_list.size();
     code_chunks.back().code_list.emplace_back(
         Opcode::JUMP,
-        std::vector<size_t>{0}, // 占位目标索引
+        0, // 占位目标索引
         if_stmt->pos
     );
 
     // 填充JUMP_IF_FALSE的目标（else块开始位置）
-    code_chunks.back().code_list[jump_if_false_idx].opn_list[0] = code_chunks.back().code_list.size();
+    code_chunks.back().code_list[jump_if_false_idx].opn = code_chunks.back().code_list.size();
 
     // 生成else块IR（存在则生成）
     if (if_stmt->elseBlock) {
@@ -306,7 +306,7 @@ void IRGenerator::gen_if(IfStmt* if_stmt) {
     }
 
     // 填充JUMP的目标（if-else结束位置）
-    code_chunks.back().code_list[jump_else_idx].opn_list[0] = code_chunks.back().code_list.size();
+    code_chunks.back().code_list[jump_else_idx].opn = code_chunks.back().code_list.size();
 }
 
 void IRGenerator::gen_fn_decl(NamedFuncDeclStmt* func) {
@@ -326,12 +326,12 @@ void IRGenerator::gen_fn_decl(NamedFuncDeclStmt* func) {
         const size_t nil_idx = get_or_add_const(nil);
         code_chunks.back().code_list.emplace_back(
             Opcode::LOAD_CONST,
-            std::vector{nil_idx},
+            nil_idx,
             func->pos
         );
         code_chunks.back().code_list.emplace_back(
             Opcode::RET,
-            std::vector<size_t>{},
+            0,
             func->pos
         );
     }
@@ -379,7 +379,7 @@ void IRGenerator::gen_fn_decl(NamedFuncDeclStmt* func) {
     const size_t fn_const_idx = get_or_add_const(fn);
     code_chunks.back().code_list.emplace_back(
         Opcode::LOAD_CONST,
-        std::vector{fn_const_idx},
+        fn_const_idx,
         func->pos
     );
 
@@ -387,19 +387,19 @@ void IRGenerator::gen_fn_decl(NamedFuncDeclStmt* func) {
 
     code_chunks.back().code_list.emplace_back(
         Opcode::SET_LOCAL,
-        std::vector{name_idx},
+        name_idx,
         func->pos
     );
 
     code_chunks.back().code_list.emplace_back(
         Opcode::LOAD_VAR,
-        std::vector{name_idx},
+        name_idx,
         func->pos
     );
 
     code_chunks.back().code_list.emplace_back(
         Opcode::CREATE_CLOSURE,
-        std::vector<size_t>{},
+        0,
         func->pos
     );
 }
@@ -409,13 +409,13 @@ void IRGenerator::gen_object_stmt(ObjectStmt* obj_decl) {
 
     code_chunks.back().code_list.emplace_back(
         Opcode::CREATE_OBJECT,
-        std::vector<size_t>{},
+        0,
         obj_decl->pos
     );
 
     code_chunks.back().code_list.emplace_back(
         Opcode::SET_LOCAL,
-        std::vector{name_idx},
+        name_idx,
         obj_decl->pos
     );
 
@@ -424,20 +424,20 @@ void IRGenerator::gen_object_stmt(ObjectStmt* obj_decl) {
 
         code_chunks.back().code_list.emplace_back(
             Opcode::LOAD_VAR,
-            std::vector{name_idx},
+            name_idx,
             obj_decl->pos
         );
 
         code_chunks.back().code_list.emplace_back(
             Opcode::LOAD_VAR,
-            std::vector{parent_name_idx},
+            parent_name_idx,
             obj_decl->pos
         );
 
         const size_t parent_text_idx = get_or_add_name(code_chunks.back().attr_names, "__parent__");
         code_chunks.back().code_list.emplace_back(
             Opcode::SET_ATTR,
-            std::vector{parent_text_idx},
+            parent_text_idx,
             obj_decl->pos
         );
     }
@@ -446,7 +446,7 @@ void IRGenerator::gen_object_stmt(ObjectStmt* obj_decl) {
         if (const auto sub_assign_stmt = dynamic_cast<AssignStmt*>(sub_assign.get())) {
             code_chunks.back().code_list.emplace_back(
                 Opcode::LOAD_VAR,
-                std::vector{name_idx},
+                name_idx,
                 obj_decl->pos
             );
             assert(sub_assign_stmt->expr.get());
@@ -456,7 +456,7 @@ void IRGenerator::gen_object_stmt(ObjectStmt* obj_decl) {
 
             code_chunks.back().code_list.emplace_back(
                 Opcode::SET_ATTR,
-                std::vector{sub_name_idx},
+                sub_name_idx,
                 obj_decl->pos
             );
         } else if (auto f_decl = dynamic_cast<NamedFuncDeclStmt*>(sub_assign.get())) {
@@ -465,21 +465,21 @@ void IRGenerator::gen_object_stmt(ObjectStmt* obj_decl) {
             auto set_func_instr = code_chunks.back().code_list[code_chunks.back().code_list.size() - 3];
             code_chunks.back().code_list.emplace_back(
                 Opcode::LOAD_VAR,
-                std::vector{name_idx},
+                name_idx,
                 set_func_instr.pos
             );
 
             code_chunks.back().code_list.emplace_back(
                 Opcode::LOAD_VAR,
-                std::vector{set_func_instr.opn_list[0]},
+                set_func_instr.opn,
                 set_func_instr.pos
             );
 
-            auto sub_func_name = code_chunks.back().var_names[set_func_instr.opn_list[0]];
+            auto sub_func_name = code_chunks.back().var_names[set_func_instr.opn];
             auto sub_func_name_idx = get_or_add_name(code_chunks.back().attr_names, sub_func_name);
             code_chunks.back().code_list.emplace_back(
                 Opcode::SET_ATTR,
-                std::vector{sub_func_name_idx},
+                sub_func_name_idx,
                 set_func_instr.pos
             );
         } else {
@@ -503,7 +503,7 @@ void IRGenerator::gen_while(WhileStmt* while_stmt) {
     const size_t jump_if_false_idx = code_chunks.back().code_list.size();
     code_chunks.back().code_list.emplace_back(
         Opcode::JUMP_IF_FALSE,
-        std::vector<size_t>{0}, // 占位，后续填充为循环结束位置
+        0, // 占位，后续填充为循环结束位置
         while_stmt->pos
     );
 
@@ -516,20 +516,20 @@ void IRGenerator::gen_while(WhileStmt* while_stmt) {
     // 生成JUMP指令，跳回循环入口
     code_chunks.back().code_list.emplace_back(
         Opcode::JUMP,
-        std::vector<size_t>{loop_entry_idx},
+        loop_entry_idx,
         while_stmt->pos
     );
 
     // 填充JUMP_IF_FALSE的目标（循环结束位置 = 当前代码列表长度）
     size_t loop_exit_idx = code_chunks.back().code_list.size();
-    code_chunks.back().code_list[jump_if_false_idx].opn_list[0] = loop_exit_idx;
+    code_chunks.back().code_list[jump_if_false_idx].opn = loop_exit_idx;
 
     for (const auto break_pos : code_chunks.back().loop_info_stack.back().break_pos) {
-        code_chunks.back().code_list[break_pos].opn_list[0] = loop_exit_idx;
+        code_chunks.back().code_list[break_pos].opn = loop_exit_idx;
     }
 
     for (const auto continue_pos : code_chunks.back().loop_info_stack.back().continue_pos) {
-        code_chunks.back().code_list[continue_pos].opn_list[0] = loop_entry_idx;
+        code_chunks.back().code_list[continue_pos].opn = loop_entry_idx;
     }
 
     code_chunks.back().loop_info_stack.pop_back();
@@ -543,7 +543,7 @@ void IRGenerator::gen_for(ForStmt* for_stmt) {
 
     code_chunks.back().code_list.emplace_back(
         Opcode::CACHE_ITER,
-        std::vector<size_t>{},
+        0,
         for_stmt->pos
     );
 
@@ -552,13 +552,13 @@ void IRGenerator::gen_for(ForStmt* for_stmt) {
 
     code_chunks.back().code_list.emplace_back(
         Opcode::MAKE_LIST,
-        std::vector<size_t>{0},
+        0,
         for_stmt->pos
     );
 
     code_chunks.back().code_list.emplace_back(
         Opcode::GET_ITER,
-        std::vector<size_t>{},
+        0,
         for_stmt->pos
     );
 
@@ -566,20 +566,20 @@ void IRGenerator::gen_for(ForStmt* for_stmt) {
 
     code_chunks.back().code_list.emplace_back(
         Opcode::CALL_METHOD,
-        std::vector{name_idx},
+        name_idx,
         for_stmt->pos
     );
 
     size_t var_name_idx = get_or_add_name(code_chunks.back().var_names, for_stmt->item_var_name);
     code_chunks.back().code_list.emplace_back(
         Opcode::SET_LOCAL,
-        std::vector{var_name_idx},
+        var_name_idx,
         for_stmt->pos
     );
 
     code_chunks.back().code_list.emplace_back(
         Opcode::LOAD_VAR,
-        std::vector{var_name_idx},
+        var_name_idx,
         for_stmt->pos
     );
 
@@ -587,7 +587,7 @@ void IRGenerator::gen_for(ForStmt* for_stmt) {
     const size_t jump_if_false_idx = code_chunks.back().code_list.size();
     code_chunks.back().code_list.emplace_back(
         Opcode::JUMP_IF_FINISH_ITER,
-        std::vector<size_t>{0}, // 占位，后续填充为循环结束位置
+        0, // 占位，后续填充为循环结束位置
         for_stmt->pos
     );
 
@@ -600,26 +600,26 @@ void IRGenerator::gen_for(ForStmt* for_stmt) {
     // 生成JUMP指令，跳回循环入口
     code_chunks.back().code_list.emplace_back(
         Opcode::JUMP,
-        std::vector{loop_entry_idx},
+        loop_entry_idx,
         for_stmt->pos
     );
 
     // 填充JUMP_IF_FALSE的目标（循环结束位置 = 当前代码列表长度）
     size_t loop_exit_idx = code_chunks.back().code_list.size();
-    code_chunks.back().code_list[jump_if_false_idx].opn_list[0] = loop_exit_idx;
+    code_chunks.back().code_list[jump_if_false_idx].opn = loop_exit_idx;
 
     code_chunks.back().code_list.emplace_back(
         Opcode::POP_ITER,
-        std::vector<size_t>{},
+        0,
         for_stmt->pos
     );
 
     for (const auto break_pos : code_chunks.back().loop_info_stack.back().break_pos) {
-        code_chunks.back().code_list[break_pos].opn_list[0] = loop_exit_idx;
+        code_chunks.back().code_list[break_pos].opn = loop_exit_idx;
     }
 
     for (const auto continue_pos : code_chunks.back().loop_info_stack.back().continue_pos) {
-        code_chunks.back().code_list[continue_pos].opn_list[0] = loop_entry_idx;
+        code_chunks.back().code_list[continue_pos].opn = loop_entry_idx;
     }
 
     code_chunks.back().loop_info_stack.pop_back();
@@ -636,7 +636,7 @@ void IRGenerator::gen_try(TryStmt* try_stmt) {
     size_t jump_to_finally_idx = code_chunks.back().code_list.size();
     code_chunks.back().code_list.emplace_back(
         Opcode::JUMP,
-        std::vector<size_t>{0},
+        0,
         try_stmt->pos
     );
 
@@ -653,13 +653,13 @@ void IRGenerator::gen_try(TryStmt* try_stmt) {
 
         code_chunks.back().code_list.emplace_back(
             Opcode::LOAD_ERROR,
-            std::vector<size_t>{},
+            0,
             try_stmt->pos
         );
 
         code_chunks.back().code_list.emplace_back(
             Opcode::SET_LOCAL,
-            std::vector{name_idx},
+            name_idx,
             try_stmt->pos
         );
         gen_block(catch_stmt->catch_block.get());
@@ -667,21 +667,21 @@ void IRGenerator::gen_try(TryStmt* try_stmt) {
         catch_jump_to_finally_pcs.push_back(code_chunks.back().code_list.size());
         code_chunks.back().code_list.emplace_back(
             Opcode::JUMP,
-            std::vector<size_t>{0},
+            0,
             try_stmt->pos
         );
     }
 
     exception_table.mismatch_pc = code_chunks.back().code_list.size();
-    code_chunks.back().code_list.emplace_back( Opcode::LOAD_ERROR, std::vector<size_t>{}, try_stmt->pos);
-    code_chunks.back().code_list.emplace_back(Opcode::THROW, std::vector<size_t>{}, try_stmt->pos);
+    code_chunks.back().code_list.emplace_back( Opcode::LOAD_ERROR, 0, try_stmt->pos);
+    code_chunks.back().code_list.emplace_back(Opcode::THROW, 0, try_stmt->pos);
 
     code_chunks.back().exception_tables.push_back(exception_table);
 
     // 回填跳转到finally
-    code_chunks.back().code_list[jump_to_finally_idx].opn_list[0] = code_chunks.back().code_list.size();
+    code_chunks.back().code_list[jump_to_finally_idx].opn = code_chunks.back().code_list.size();
     for (auto catch_jump_to_finally_pc : catch_jump_to_finally_pcs) {
-        code_chunks.back().code_list[catch_jump_to_finally_pc].opn_list[0] = code_chunks.back().code_list.size();
+        code_chunks.back().code_list[catch_jump_to_finally_pc].opn = code_chunks.back().code_list.size();
     }
 
 }
