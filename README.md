@@ -1,5 +1,5 @@
 <div align="center">
-    <img src="https://user3082.cn.imgto.link/public/20260225/segment.svg" width="250" alt="kiz logo"
+    <img src="https://user3082.cn.imgto.link/public/20260225/segment.svg" width="250" alt="kiz logo">
     <h1> kiz v2.x </h1>
 </div>
 
