@@ -1,6 +1,0 @@
-fn foo(x: Int) -> Int \ (ConsoleEff)
-    y: Int = x + 1
-    print(y)
-end
-
-foo(3)

@@ -1,5 +1,0 @@
-fn printf(fmt, ...s)
-    print(fmt.format(...s))
-end
-
-printf("Hello {} from {}", "world", "kiz")

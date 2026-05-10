@@ -1,8 +1,0 @@
-fn foo(first, ...a)
-    print(first)
-    for i in a
-        print(i)
-    end
-end
-
-foo("first", "ab", "cd")

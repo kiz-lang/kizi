@@ -1,8 +1,0 @@
-import test at "be_imported.kiz"
-
-print(test)
-print(test.abc)
-
-test.bark()
-
-test.foo()

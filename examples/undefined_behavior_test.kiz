@@ -1,7 +1,0 @@
-a = 0
-
-ensure print(a)
-
-ensure (fn
-    nonlocal a = 1
-end)()

@@ -1,5 +1,0 @@
-try
-    1/0
-catch e (a)
-    print(9)
-end
