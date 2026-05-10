@@ -144,7 +144,7 @@ void Vm::handle_import(const std::string& module_path) {
     bool file_in_path = false;
     fs::path actually_found_path = "";
     std::vector for_search_paths = {
-        fs::absolute(module_path),
+        fs::absolute(current_file_path.parent_path() / module_path),
         get_exe_abs_dir() / fs::path(module_path),
         get_exe_abs_dir().parent_path() / fs::path("modules") / fs::path(module_path) / fs::path("__main__.kiz"),
         get_exe_abs_dir().parent_path() / fs::path("modules") / fs::path(module_path)

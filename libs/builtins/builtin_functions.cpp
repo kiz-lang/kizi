@@ -378,7 +378,7 @@ model::Object* open(model::Object* self, const model::List* args) {
     auto path = cast_to_str(args->val[0])->val;
     auto mode = cast_to_str(args->val[1])->val;
 
-    auto real_path = std::filesystem::absolute(path);
+    auto real_path = std::filesystem::absolute(kiz::Vm::get_current_file_path().parent_path() / path);
 
     std::ios_base::openmode open_mode = std::ios_base::in | std::ios_base::out; // 默认不设置 binary
     // 根据 mode 设置具体标志（此处 mode 不包含 'b'，即默认文本模式）
