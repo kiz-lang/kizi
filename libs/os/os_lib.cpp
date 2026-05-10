@@ -7,14 +7,14 @@
 #include "builtins/include/builtin_functions.hpp"
 
 #ifdef _WIN32
-    #include <windows.h>
-    #include <direct.h>
-    #define PATH_MAX MAX_PATH
+#   include <windows.h>
+#   include <direct.h>
+#   define PATH_MAX MAX_PATH
     extern char** _environ;
 #else
-    #include <unistd.h>
+#   include <unistd.h>
+#   include <climits>
     extern char** environ;
-    #include <climits>
 #endif
 
 namespace os_lib {
