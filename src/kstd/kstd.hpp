@@ -1,15 +1,14 @@
 #pragma once
 
-//| The kiz standard library (kstd)
-//| author: azhz@azhz1107cat@outlook.com
-//|
+//|    The kizc&kizrt's based standard library (kstd)
+//|    author: azhz@azhz1107cat@outlook.com
 //|
 //|     _        _      _ 
 //|    | | _____| |_ __| |
 //|    | |/ / __| __/ _` |
 //|    |   <\__ \ || (_| |
 //|    |_|\_\___/\__\__,_|
-//|              
+//|
 
 namespace kstd {
 #include "ptr.hpp"
