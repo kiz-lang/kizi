@@ -1,6 +1,6 @@
 #pragma once
 
-//| The kiz std library (lstd)
+//| The kiz standard library (kstd)
 //| author: azhz@azhz1107cat@outlook.com
 //|
 //|
