@@ -1,0 +1,88 @@
+/// 常量操作
+$Op(LoadConstInt,)
+$Op(LoadConstString,)
+$Op(LoadConstDecimal,)
+
+/// 内存操作
+$Op(LoadStatic,)
+$Op(SetStatic,)
+$Op(LoadLocal,)
+$Op(SetLocal,)
+$Op(MuiltSetLocal,)
+
+/// 对象操作
+$Op(Move,)
+$Op(Ref,)
+$Op(MutRef,)
+$Op(Box,)
+$Op(UnBox,)
+$Op(Deref,)
+$Op(CloneValue,)
+$Op(Drop,)
+
+/// 指令操作
+$Op(Jump,)
+$Op(JumpIfTrue,)
+$Op(JumpIfFalse,)
+$Op(Call,)
+$Op(CallByPtr,)
+$Op(Return,)
+
+/// 实例与类型
+$Op(NewInstance,)
+$Op(GetTag,)
+$Op(GetOffset)
+$Op(SetOffset)
+$Op(Match,)
+$Op(IsSameTag,)
+$Op(IsSameTagAndValue,)
+$Op(Typeof,)
+$Op(DecimalToInt,)
+$Op(IntToDecimal,)
+
+/// AE
+$Op(EffectRaise,)
+$Op(EffectResume,)
+$Op(EffectUnwind,)
+
+/// 优化类
+$Op(Assert,)
+$Op(SwitchInt,)
+$Op(ShellPrint,)
+
+/// 整数操作
+$Op(IntAdd,)
+$Op(IntSub,)
+$Op(IntMul,)
+$Op(IntIdiv,)
+$Op(IntMod,)
+$Op(IntNeg,)
+$Op(IntBitAnd,)
+$Op(IntBitOr,)
+$Op(IntBitXor,)
+$Op(IntBitNot,)
+$Op(IntShl,)
+$Op(IntShr,)
+$Op(IntEq,)
+$Op(IntNe,)
+$Op(IntLt,)
+$Op(IntGt,)
+$Op(IntLe,)
+$Op(IntGe,)
+$Op(IntAnd,)
+$Op(IntOr,)
+$Op(IntNot,)
+
+/// 小数操作
+$Op(DecAdd,)
+$Op(DecSub,)
+$Op(DecMul,)
+$Op(DecDiv,)
+$Op(DecMod,)
+$Op(DecNeg,)
+$Op(DecEq,)
+$Op(DecNe,)
+$Op(DecLt,)
+$Op(DecGt,)
+$Op(DecLe,)
+$Op(DecGe,)
