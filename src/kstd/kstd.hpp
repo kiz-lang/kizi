@@ -17,7 +17,7 @@ namespace kstd {
 #include "option.hpp"
 #include "result.hpp"
 
-#define $VecForeach(i,v) for (auto i = 0; i < v.len(); ++1)
+#define $VecForeach(i,v) for (auto i = 0; i < v.size(); ++1)
 #ifdef _MSC_VER
 #   define $Likely(x) (x)
 #   define $Unlikely(x) (x)
