@@ -16,8 +16,10 @@
 // 跨平台头文件
 #ifdef _WIN32
     #include <windows.h>
+    #include <io.h>
 #elif __APPLE__
     #include <ApplicationServices/ApplicationServices.h>
+    #include <unistd.h>
 #elif __linux__
 // Linux 纯sys API 依赖，无X11
     #include <fcntl.h>
@@ -127,7 +129,12 @@ std::string Repl::get_whole_input(std::istream *is, std::ostream *os) {
     std::string input;
     char ch;
     // 非终端（管道/重定向）时不做Shift检测：既省去每字符的系统调用，也避免管道误触发续行
-    const bool interactive = isatty(fileno(stdin));
+    // MSVC下POSIX名是deprecated别名，用_前缀的规范形式
+#ifdef _WIN32
+    const bool interactive = _isatty(_fileno(stdin)) != 0;
+#else
+    const bool interactive = isatty(fileno(stdin)) != 0;
+#endif
 
     while (is->get(ch)) { // 直接判断流状态，get失败（eof/fail）时退出
         // 先判换行再做Shift检测（系统调用代价高，不应每个字符都触发）

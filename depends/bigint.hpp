@@ -257,6 +257,13 @@ public:
 
     // ========================= 构造与析构 =========================
     BigInt() : is_negative_(false), digits_(1, 0) {}
+#if defined(_MSC_VER) && defined(_WIN64)
+    // MSVC下size_t就是unsigned long long的typedef，两个签名会撞成C2535，只能保留一个
+    BigInt(size_t val) : is_negative_(false) {
+        if (val == 0) { digits_.push_back(0); return; }
+        while (val > 0) { digits_.push_back(static_cast<uint8_t>(val % 10)); val /= 10; }
+    }
+#else
     BigInt(size_t val) : is_negative_(false) {
         if (val == 0) { digits_.push_back(0); return; }
         while (val > 0) { digits_.push_back(static_cast<uint8_t>(val % 10)); val /= 10; }
@@ -266,6 +273,7 @@ public:
         if (val == 0) { digits_.push_back(0); return; }
         while (val > 0) { digits_.push_back(static_cast<uint8_t>(val % 10)); val /= 10; }
     }
+#endif
     // 有符号重载：防止负整数经隐式转换到size_t后变成巨大无符号数
     BigInt(long long val) : is_negative_(val < 0) {
         auto mag = is_negative_ ? static_cast<unsigned long long>(-(val + 1)) + 1 : static_cast<unsigned long long>(val);
