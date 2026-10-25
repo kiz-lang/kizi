@@ -18,7 +18,6 @@ statement           ::= empty_stmt
                       | return_stmt
                       | throw_stmt
                       | try_stmt
-                      | ensure_stmt
                       | import_stmt
                       | global_stmt
                       | nonlocal_stmt
@@ -88,7 +87,7 @@ list_literal        ::= '[' ( expr ( ',' expr )* )? ']'
 
 (* 字典 *)
 dict_literal        ::= '{' ( dict_entry ( ',' dict_entry )* )? '}'
-dict_entry          ::= expr '=' expr              // {"key" = val, 0 = 2}
+dict_entry          ::= expr ':' expr              // {"key": val, 0: 2}
 
 (* -------------------------------------------------------------------------- *)
 (* Lambda / 匿名函数 *)
@@ -117,12 +116,10 @@ return_stmt         ::= 'return' ( expr )?
 throw_stmt          ::= 'throw' expr
 
 (* -------------------------------------------------------------------------- *)
-(* Try / Catch / Ensure *)
+(* Try / Catch *)
 (* -------------------------------------------------------------------------- *)
 try_stmt            ::= 'try' block ( catch_clause )* 'end'
 catch_clause        ::= 'catch' identifier '(' str_literal ')' block
-
-ensure_stmt         ::= 'ensure' expr
 
 (* -------------------------------------------------------------------------- *)
 (* 函数定义 *)

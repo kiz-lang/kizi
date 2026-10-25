@@ -1,0 +1,7 @@
+i = 42
+d = 3.14
+s = "text"
+b = True
+n = Nil
+print(i, d, s, b, n)
+print(type(i), type(d), type(s), type(b), type(n))

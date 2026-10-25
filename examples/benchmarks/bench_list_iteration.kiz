@@ -1,0 +1,27 @@
+# 基准：列表遍历（for循环 + 下标访问 + foreach回调）
+N = 20000
+xs = range(N)
+
+# 预热
+total = 0
+for x in xs
+    total = total + x
+end
+
+start = now()
+total = 0
+for x in xs
+    total = total + x
+end
+elapsed = now() - start
+print("list_for", N, "elems:", elapsed, "ns", "checksum:", total)
+
+start = now()
+total = 0
+i = 0
+while i < N
+    total = total + xs[i]
+    i = i + 1
+end
+elapsed2 = now() - start
+print("list_index", N, "elems:", elapsed2, "ns", "checksum:", total)

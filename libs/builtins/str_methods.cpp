@@ -1,3 +1,9 @@
+/**
+ * @file str_methods.cpp
+ * @brief String类型的魔术方法与成员方法实现
+ * @author azhz1107cat
+ * @date 2026-10-25
+ */
 #include "../depends/u8str.hpp"
 #include "../../src/models/models.hpp"
 #include "include/builtin_functions.hpp"
@@ -71,6 +77,61 @@ Object* str_eq(Object* self, const List* args) {
     return load_bool(self_str->val == another_str->val);
 };
 
+// String.__lt__：字典序小于（补齐字符串的大小比较能力）
+Object* str_lt(Object* self, const List* args) {
+    kiz::Vm::assert_argc(1, args);
+
+    auto self_str = dynamic_cast<String*>(self);
+    assert(self_str != nullptr);
+
+    auto another_str = dynamic_cast<String*>(args->val[0]);
+    if (! another_str)
+        throw NativeFuncError("TypeError","String.lt only supports String type argument");
+
+    return load_bool(self_str->val < another_str->val);
+};
+
+// String.__gt__：字典序大于
+Object* str_gt(Object* self, const List* args) {
+    kiz::Vm::assert_argc(1, args);
+
+    auto self_str = dynamic_cast<String*>(self);
+    assert(self_str != nullptr);
+
+    auto another_str = dynamic_cast<String*>(args->val[0]);
+    if (! another_str)
+        throw NativeFuncError("TypeError","String.gt only supports String type argument");
+
+    return load_bool(self_str->val > another_str->val);
+};
+
+// String.find：查找子串首个出现的码点下标，未找到返回-1
+Object* str_find(Object* self, const List* args) {
+    kiz::Vm::assert_argc(1, args);
+
+    auto self_str = cast_to_str(self);
+    auto target = dynamic_cast<String*>(args->val[0]);
+    if (! target)
+        throw NativeFuncError("TypeError","String.find only supports String type argument");
+
+    dep::UTF8String source(self_str->val);
+    dep::UTF8String needle(target->val);
+    if (needle.size() == 0) return new Int(0);
+    if (needle.size() > source.size()) return new Int(-1);
+
+    for (size_t i = 0; i + needle.size() <= source.size(); ++i) {
+        bool matched = true;
+        for (size_t j = 0; j < needle.size(); ++j) {
+            if (!(source[i + j] == needle[j])) {
+                matched = false;
+                break;
+            }
+        }
+        if (matched) return new Int(i);
+    }
+    return new Int(-1);
+};
+
 // String.__contains__：判断是否包含子字符串 x in self
 Object* str_contains(Object* self, const List* args) {
     kiz::Vm::assert_argc(1, args);
@@ -90,7 +151,8 @@ Object* str_contains(Object* self, const List* args) {
 Object* str_hash(Object* self, const List* args) {
     auto self_str = dynamic_cast<String*>(self);
     assert(self_str != nullptr);
-    auto hashed_str = dep::hash_string(self_str->val);
+    // 哈希带类型前缀：防止"123"与Int 123等跨类型哈希撞车
+    auto hashed_str = dep::hash_string("Str:" + self_str->val);
     return new Int(dep::BigInt(hashed_str));
 }
 
@@ -148,6 +210,7 @@ Object* str_foreach(Object* self, const List* args) {
         kiz::Vm::call_function(func_obj, {
             new String(e.to_string())
         }, nullptr);
+        kiz::Vm::get_and_pop_stack_top(); // 丢弃并释放回调返回值
         idx += 1;
     }
     return load_nil();
@@ -163,8 +226,10 @@ Object* str_count(Object* self, const List* args) {
             new String(c.to_string())
         });
         auto res = kiz::Vm::get_and_pop_stack_top();
-        if (res.get()) {
-            ++ count;
+        if (const auto res_bool = dynamic_cast<Bool*>(res.get())) {
+            if (res_bool->val) { // 比较结果为Bool值，而非指针本身是否为空
+                ++ count;
+            }
         }
     }
     return new Int(count);
@@ -214,6 +279,7 @@ Object* str_len(Object* self, const List* args) {
 Object* str_is_alpha(Object* self, const List* args) {
     auto self_str = cast_to_str(self);
     auto str = dep::UTF8String(self_str->val);
+    if (str.empty()) return load_false(); // 空串按约定不为纯字母
     bool is_alpha = true;
     for (const auto& c : str) {
         if (!c.is_alpha()) is_alpha = false;
@@ -224,6 +290,7 @@ Object* str_is_alpha(Object* self, const List* args) {
 Object* str_is_digit(Object* self, const List* args) {
     auto self_str = cast_to_str(self);
     auto str = dep::UTF8String(self_str->val);
+    if (str.empty()) return load_false(); // 空串按约定不为纯数字
     bool is_digit = true;
     for (const auto& c : str) {
         if (!c.is_digit()) is_digit = false;
@@ -235,17 +302,16 @@ Object* str_is_digit(Object* self, const List* args) {
 Object* str_substr(Object* self, const List* args) {
     auto self_str = cast_to_str(self);
     auto args_vec = args->val;
-    kiz::Vm::assert_argc(2, args);
+    kiz::Vm::assert_argc({1,2}, args);
 
     size_t pos = cast_to_int(args_vec[0])->val.to_unsigned_long_long();
-    size_t len = 1;
+    auto source = dep::UTF8String(self_str->val);
+    size_t len = source.size() > pos ? source.size() - pos : 0; // 默认取到末尾
     if (args_vec.size() > 1) {
         len = cast_to_int(args_vec[1])->val.to_unsigned_long_long();
     }
 
-    return new String(dep::UTF8String(self_str->val).substr(
-        pos, len
-    ).to_string());
+    return new String(source.substr(pos, len).to_string());
 }
 
 Object* str_to_lower(Object* self, const List* args) {

@@ -1,0 +1,10 @@
+counter = create()
+counter.n = 0
+counter.incr = fn(this)
+    this.n = this.n + 1
+    return this.n
+end
+print(counter.incr(), counter.incr(), counter.n)
+alias = counter
+print(alias.incr())
+print(counter.n)

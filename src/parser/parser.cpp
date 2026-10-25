@@ -20,6 +20,8 @@
 
 namespace kiz {
 
+thread_local size_t Parser::nest_depth_ = 0;
+
 Token Parser::skip_token(const std::string& want_skip) {
     DEBUG_OUTPUT("skipping token: index " + std::to_string(curr_tok_idx_));
 

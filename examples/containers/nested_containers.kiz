@@ -1,0 +1,7 @@
+m = [[1, 2], [3, 4]]
+print(m[1][0])
+m[0][0] = 9
+print(m)
+info = {"list": [1, 2], "dict": {"x": 1}}
+print(info["list"][1])
+print(info["dict"]["x"])

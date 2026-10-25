@@ -1,0 +1,10 @@
+start = now()
+total = 0
+i = 0
+while i < 100000
+    total = total + i
+    i = i + 1
+end
+elapsed = now() - start
+print("total:", total)
+print("耗时(ns):", elapsed)

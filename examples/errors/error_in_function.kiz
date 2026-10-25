@@ -1,0 +1,11 @@
+fn inner
+    throw Error("Deep", "来自深处")
+end
+fn middle
+    inner()
+end
+try
+    middle()
+catch e (Deep)
+    print("外层捕获:", e.__msg__)
+end

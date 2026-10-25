@@ -1,0 +1,22 @@
+# 压力：密集异常（错误对象构造/解栈/异常表 持续高频）
+ROUNDS = 30
+PER = 1000
+
+total = 0
+r = 0
+while r < ROUNDS
+    i = 0
+    while i < PER
+        try
+            if i % 2 == 0
+                throw Error("Storm", Str(i))
+            end
+            total = total + 1
+        catch e (Storm)
+            total = total + 0
+        end
+        i = i + 1
+    end
+    r = r + 1
+end
+print("exception storm done:", ROUNDS * PER, "rounds, half threw")

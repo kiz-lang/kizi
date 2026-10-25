@@ -1,0 +1,7 @@
+d = {}
+d[1] = "int"
+d["1"] = "str"
+d[True] = "bool"
+d[Nil] = "nil"
+print(d[1], d["1"], d[True], d[Nil])
+print(len(d))

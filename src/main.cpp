@@ -27,11 +27,7 @@ void show_help(const char* prog_name);
 /// 命令行参数解析函数
 void args_parser(int argc, char* argv[]);
 
-/// 测试examples文件夹中所有文件
-void start_test();
-
-/// 运行文件
-void run_file(const std::string& path);
+#include "test_runner.hpp"
 
 /// 主函数
 int main(const int argc, char* argv[]) {
@@ -143,16 +139,35 @@ void args_parser(const int argc, char* argv[]) {
     }
     const char* prog_name = argv[0];
 
+    // 预处理：剥离全局选项（--nocolor此前根本未被解析，会被当成文件名）
+    int arg_index = 1;
+    while (arg_index < argc) {
+        if (std::string(argv[arg_index]) == "--nocolor") {
+            nocolor = true;
+            Color::clear_color();
+            ++arg_index;
+        } else {
+            break;
+        }
+    }
+    const int eff_argc = argc - (arg_index - 1);
+
     // 无参数：默认启动REPL
-    if (argc == 1) {
+    if (eff_argc <= 1) {
+        if (argc > 1 && std::string(argv[1]) == "run") {
+            // kiz run 后没有跟路径
+            std::cerr << "Error: 'run' requires a file path" << std::endl;
+            show_help();
+            return;
+        }
         ui::Repl repl;
         repl.loop();
         return;
     }
 
     // 1个参数 : 处理 version/repl/help/路径
-    if (argc == 2) {
-        const std::string cmd = argv[1];
+    if (eff_argc == 2) {
+        const std::string cmd = argv[arg_index];
         if (cmd == "version") {
             // 显示版本
             std::cout << "kiz version : " << KIZ_VERSION << std::endl;
@@ -167,41 +182,50 @@ void args_parser(const int argc, char* argv[]) {
             // 测试
             start_test();
         } else {
-            std::string path = argv[1];
+            std::string path = argv[arg_index];
             run_file(path);
         }
         return;
     }
 
-    const std::string first_cmd = argv[1];
-    int path_index = 0;
+    const std::string first_cmd = argv[arg_index];
 
     if (first_cmd == "run") {
-        path_index = 2; // run命令后紧跟路径
-        // 如果参数数>3，收集路径后的所有参数
-        if (argc > 3) {
-            for (int i = 3; i < argc; ++i) {
+        if (arg_index + 1 >= argc) {
+            // kiz run 后没有跟路径
+            std::cerr << "Error: 'run' requires a file path" << std::endl;
+            show_help();
+            return;
+        }
+        // run命令后紧跟路径
+        // 如果还有更多参数，收集路径后的所有参数
+        if (arg_index + 2 < argc) {
+            for (int i = arg_index + 2; i < argc; ++i) {
                 os_lib::rest_argv.push_back(argv[i]);
             }
         }
-        std::string path = argv[path_index];
+        std::string path = argv[arg_index + 1];
         run_file(path);
     } else {
         // 非run命令，第一个参数是路径（如 kiz a.kiz 1 2）
-        path_index = 1;
-        // 如果参数数>2，收集路径后的所有参数
-        if (argc > 2) {
-            for (int i = 2; i < argc; ++i) {
-                os_lib::rest_argv.push_back(argv[i]);
-            }
+        // 收集路径后的所有参数
+        for (int i = arg_index + 1; i < argc; ++i) {
+            os_lib::rest_argv.push_back(argv[i]);
         }
-        std::string path = argv[path_index];
+        std::string path = argv[arg_index];
         run_file(path);
     }
 }
 
 void run_file(const std::string& path) {
-    const auto content = err::SrcManager::get_file_by_path(path);
+    // 文件读取包进try：文件不存在/不可读时给出友好错误，而不是未捕获异常terminate
+    std::string content;
+    try {
+        content = err::SrcManager::get_file_by_path(path);
+    } catch (const KizStopRunningSignal& e) {
+        std::cerr << "Error: " << (e.what() && *e.what() ? e.what() : "cannot open file") << ": " << path << std::endl;
+        std::exit(1);
+    }
     kiz::Lexer lexer(path);
     kiz::Parser parser(path);
     kiz::IRGenerator ir_gen(path);
@@ -215,14 +239,8 @@ void run_file(const std::string& path) {
         auto module = kiz::IRGenerator::gen_mod(path, ir);
         kiz::Vm::set_main_module(module);
         kiz::Vm::exec_curr_code();
-        kiz::Vm::handle_ensure();
     } catch (KizStopRunningSignal& e) {
-        if (std::string(e.what()).empty()) {
-            std::exit(0);
-        }
-        std::cout << Color::BOLD <<
-        Color::BRIGHT_RED << "A Panic!" << Color::RESET
-        << Color::WHITE << " : " << e.what() << Color::RESET << "\n";
+        // 未捕获的脚本错误必须以非零码退出（空消息代表错误已由traceback打印）
         std::exit(1);
     }
 }
@@ -275,33 +293,4 @@ the kiz cmd help
   -----------------------
 )";
     std::cout << text << std::endl;
-}
-
-/// 启动测试
-void start_test() {
-    const fs::path target_dir = R"(../examples)";
-    // 检查目录是否存在
-    if (!fs::exists(target_dir) || !fs::is_directory(target_dir)) {
-        std::cerr << "invalid dir: " << target_dir << std::endl;
-        return;
-    }
-
-    // 遍历目录
-    for (const fs::directory_entry& entry : fs::directory_iterator(target_dir)) {
-        if (entry.is_regular_file()) {
-            const fs::path& f_path = entry.path();
-            if (f_path.string().ends_with(".txt")) continue;
-            std::cout << "===== [file]: " << f_path << " =====" << "\n";
-            try {
-                run_file(f_path.string());
-            } catch (KizStopRunningSignal& e) {
-                std::cout << "====== recover from a error =====\n";
-                continue;
-            }
-            kiz::Vm::call_stack.clear();
-            kiz::Vm::op_stack.clear();
-            std::cout << "========================\n" << "\n";
-        }
-    }
-    std::cout << "All test pass !" << std::endl;
 }

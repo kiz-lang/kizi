@@ -1,3 +1,9 @@
+/**
+ * @file builtins_lib.cpp
+ * @brief builtins标准模块的初始化实现
+ * @author azhz1107cat
+ * @date 2026-10-25
+ */
 #include "include/builtins_lib.hpp"
 
 namespace builtins_lib {

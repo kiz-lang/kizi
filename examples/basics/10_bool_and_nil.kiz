@@ -1,0 +1,8 @@
+print(True and False, True or False, not True)
+print(Nil == Nil)
+print(Nil != 1)
+if Nil
+    print("不可达")
+else
+    print("Nil为假")
+end

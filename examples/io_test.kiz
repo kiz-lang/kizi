@@ -1,3 +1,0 @@
-f = open("for_test_io.txt", "r")
-ensure f.close()
-print(f.read())

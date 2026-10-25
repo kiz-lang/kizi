@@ -1,0 +1,18 @@
+# 基准：整数循环（LOAD_VAR/SET_LOCAL/JUMP_IF_FALSE/算术指令密度）
+WARMUP = 20000
+N = 300000
+
+i = 0
+while i < WARMUP
+    i = i + 1
+end
+
+start = now()
+i = 0
+while i < N
+    i = i + 1
+end
+elapsed = now() - start
+
+print("int_loop", N, "iters:", elapsed, "ns")
+print("per_op_ns:", elapsed / N)

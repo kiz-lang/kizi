@@ -1,0 +1,21 @@
+object Outer
+    x = 1
+    fn hello(this)
+        return "hello from Outer"
+    end
+    object Inner
+        y = 2
+        fn hi(this)
+            return "hi from Inner"
+        end
+    end
+end
+
+print(Outer.x)
+print(Outer.hello())
+print(Outer.Inner.y)
+print(Outer.Inner.hi())
+
+o = create(Outer.Inner)
+print(o.y)
+print(ischild(o, Outer.Inner))

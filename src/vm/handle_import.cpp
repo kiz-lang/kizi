@@ -1,3 +1,9 @@
+/**
+ * @file handle_import.cpp
+ * @brief import模块的搜索/解析/执行/缓存
+ * @author azhz1107cat
+ * @date 2026-10-25
+ */
 #include <cassert>
 #include <fstream>
 
@@ -17,6 +23,7 @@
 #include <cstddef>
 #include <array>
 #include <format>
+#include <unordered_set>
 
 // 跨平台兼容：处理Windows/Linux/macOS的编译差异
 #ifdef _WIN32
@@ -130,12 +137,57 @@ std::string get_file_name_by_path(const std::string& file_path) {
 
 namespace kiz {
 
+// 正在导入中的模块集合（规范化绝对路径），用于检测循环导入
+static std::unordered_set<std::string> importing_modules;
+
+// RAII守卫：无论模块执行成功还是抛异常，都从"导入中"集合移除
+struct ImportingGuard {
+    std::string key;
+    explicit ImportingGuard(std::string k) : key(std::move(k)) {}
+    ~ImportingGuard() { importing_modules.erase(key); }
+};
+
 void Vm::handle_import(const std::string& module_path) {
     std::string content;
 
-    // 先向缓存中查找
-    if (auto loaded_mod_it = modules_cache.find(module_path)) {
-        push_to_stack(loaded_mod_it->value);
+    // 路径安全限制：禁止绝对路径与..上跳，防止脚本借import探测/读取任意文件
+    {
+        fs::path raw(module_path);
+        if (raw.is_absolute()) {
+            throw NativeFuncError("PathError", "Absolute import path is not allowed: '" + module_path + "'");
+        }
+        for (const auto& part : raw) {
+            if (part == "..") {
+                throw NativeFuncError("PathError", "Import path must not contain '..': '" + module_path + "'");
+            }
+        }
+    }
+
+    // 标准库模块优先解析：避免本地同名.kiz文件静默遮蔽os/builtins等标准模块
+    if (std_modules.find(module_path)) {
+        if (auto loaded_mod_it = modules_cache.find(module_path)) {
+            push_to_stack(loaded_mod_it->value);
+            return;
+        }
+        auto std_init_it = std_modules.find(module_path);
+        auto std_init_func = dynamic_cast<model::NativeFunction*>(std_init_it->value);
+        assert(std_init_func != nullptr);
+
+        model::List* args_list = new model::List({});
+        args_list->make_ref();
+        model::Object* return_val = std_init_func->func(std_init_func, args_list);
+        // 使用后释放临时参数列表
+        args_list->del_ref();
+
+        assert(return_val != nullptr);
+
+        auto module_obj = dynamic_cast<model::Module*>(return_val);
+        assert(module_obj != nullptr);
+
+        push_to_stack(module_obj);
+
+        module_obj->make_ref();
+        modules_cache.insert(module_path, module_obj);
         return;
     }
 
@@ -161,35 +213,7 @@ void Vm::handle_import(const std::string& module_path) {
     }
 #endif
 
-
-    if (file_in_path) {
-#ifdef __EMSCRIPTEN__
-        // 不可能走到这
-        assert(false);
-#else
-        content = err::SrcManager::get_file_by_path(actually_found_path.string());
-#endif
-    } else if (auto std_init_it = std_modules.find(module_path)) {
-        auto std_init_func = dynamic_cast<model::NativeFunction*>(std_init_it->value);
-        assert(std_init_func != nullptr);
-
-        model::List* args_list = new model::List({});
-        args_list->make_ref();
-        model::Object* return_val = std_init_func->func(std_init_func, args_list);
-        // 使用后释放临时参数列表
-        args_list->del_ref();
-
-        assert(return_val != nullptr);
-
-        auto module_obj = dynamic_cast<model::Module*>(return_val);
-        assert(module_obj != nullptr);
-
-        push_to_stack(module_obj);
-
-        module_obj->make_ref();
-        modules_cache.insert(module_path, module_obj);
-        return;
-    } else {
+    if (!file_in_path) {
         throw NativeFuncError("PathError", std::format(
             "Failed to find module in path '{}', tried '{}', '{}', '{}', '{}'", module_path,
             for_search_paths[0].string(), for_search_paths[1].string(),
@@ -197,16 +221,41 @@ void Vm::handle_import(const std::string& module_path) {
         ));
     }
 
-    Lexer lexer(module_path);
-    Parser parser(module_path);
-    IRGenerator ir_gen(module_path);
+    // 以规范化绝对路径作为缓存键：同一文件的不同写法（a.kiz / ./a.kiz）共享同一模块
+    std::string cache_key = fs::absolute(actually_found_path).lexically_normal().string();
+
+    if (auto loaded_mod_it = modules_cache.find(cache_key)) {
+        push_to_stack(loaded_mod_it->value);
+        return;
+    }
+
+    // 循环导入检测：模块执行期间再次导入自身则报错，而不是无限递归崩溃
+    if (!importing_modules.insert(cache_key).second) {
+        throw NativeFuncError("ImportError", "Circular import detected: '" + module_path + "'");
+    }
+    ImportingGuard importing_guard(cache_key);
+
+#ifdef __EMSCRIPTEN__
+    // 不可能走到这
+    assert(false);
+#else
+    content = err::SrcManager::get_file_by_path(actually_found_path.string());
+#endif
+
+    // 词法/语法/IR的错误报告键与SrcManager缓存键统一用实际命中的绝对路径，
+    // 否则CWD≠脚本目录时报错上下文查不到缓存，原始错误被"打不开文件"吞掉
+    const std::string found_path_str = actually_found_path.string();
+    Lexer lexer(found_path_str);
+    Parser parser(found_path_str);
+    IRGenerator ir_gen(found_path_str);
 
     lexer.prepare(content);
     const auto tokens = lexer.tokenize();
     auto ast = parser.parse(tokens);
     const auto ir = ir_gen.gen(std::move(ast));
     auto module_obj = IRGenerator::gen_mod(module_path, ir);
-    module_obj->path = module_path;
+    // 模块路径记录实际绝对路径：嵌套import的相对路径解析以此为基准才与CWD无关
+    module_obj->path = found_path_str;
 
     module_obj->make_ref();  // 先被handle_import这个函数持有
 
@@ -225,47 +274,73 @@ void Vm::handle_import(const std::string& module_path) {
 
         .iters{},
 
-        .curr_error = nullptr,
-        .exec_ensure_stmt = false
+        .curr_error = nullptr
     };
 
     size_t old_call_stack_size = call_stack.size();
 
     call_stack.emplace_back(new_frame);
 
+    // 为模块帧的局部变量区扩容：缺了这一步，模块顶层SET_LOCAL会越界写操作数栈
+    op_stack.resize(op_stack.size() + module_obj->code->locals_count);
 
-    /// 执行新代码
-    while (running and !call_stack.empty()) {
-        auto curr_frame = call_stack.back();
-        auto frame_code = curr_frame->code_object;
 
-        // 检查是否执行到模块代码末尾：执行完毕则出栈
-        if (curr_frame->pc >= frame_code->code.size()) {
-            if (old_call_stack_size == call_stack.size() - 1) {
-                break;
+    try {
+        /// 执行新代码
+        while (running and !call_stack.empty()) {
+            auto curr_frame = call_stack.back();
+            auto frame_code = curr_frame->code_object;
+
+            // 检查是否执行到模块代码末尾：执行完毕则按RET语义清理并出栈
+            if (curr_frame->pc >= frame_code->code.size()) {
+                if (old_call_stack_size == call_stack.size() - 1) {
+                    break;
+                }
+                call_stack.pop_back();
+                unwind_op_stack_to(curr_frame->bp);
+                destroy_frame(curr_frame);
+                continue;
             }
+
+            // 执行当前指令
+            const Instruction& curr_inst = frame_code->code[curr_frame->pc];
+            try {
+                execute_unit(curr_inst); // 调用VM的指令执行核心方法
+            } catch (const NativeFuncError& e) {
+                // 原生函数执行错误，抛出异常
+                forward_to_handle_throw(e.name, e.msg);
+                if (call_stack.empty() or call_stack.back() != curr_frame) {
+                    // 处理点在更外层：穿透本函数的清理逻辑回到主执行循环
+                    throw KizUnwindSignal();
+                }
+                continue;
+            }
+
+            // 本帧被异常解栈销毁：帧数跌破基线，处理点在别的执行循环
+            if (call_stack.size() <= old_call_stack_size) {
+                throw KizUnwindSignal();
+            }
+
+            ADVANCE_PC
+
+        }
+    } catch (...) {
+        // 模块内出现未捕获异常：清理本函数压入的帧与模块引用后继续上抛
+        while (call_stack.size() > old_call_stack_size) {
+            auto frame_to_clean = call_stack.back();
             call_stack.pop_back();
-            continue;
+            unwind_op_stack_to(frame_to_clean->bp);
+            destroy_frame(frame_to_clean);
         }
-
-        // 执行当前指令
-        const Instruction& curr_inst = frame_code->code[curr_frame->pc];
-        try {
-            execute_unit(curr_inst); // 调用VM的指令执行核心方法
-        } catch (const NativeFuncError& e) {
-            // 原生函数执行错误，抛出异常
-            forward_to_handle_throw(e.name, e.msg);
-            continue;
-        }
-
-        ADVANCE_PC
-
+        module_obj->del_ref(); // 释放本函数对模块的持有
+        throw;
     }
 
     for (size_t i = call_stack.back()->bp; i < call_stack.back()->bp + call_stack.back()->code_object->locals_count; ++i) {
         const auto local_object = op_stack[i];
         const auto name = call_stack.back()->code_object->var_names[i - call_stack.back()->bp];
         if (name.starts_with("__private__")) continue;
+        if (!local_object) continue; // 未被赋值过的局部槽位不导出
 
         module_obj->attrs_insert(name, local_object);
     }
@@ -276,22 +351,14 @@ void Vm::handle_import(const std::string& module_path) {
     call_stack.pop_back();
     call_stack.back()->bp = frame->last_bp;
 
-    while (frame->bp < op_stack.size()) {
-        op_stack.back()->del_ref();
-        op_stack.pop_back();
-    }
-    frame->owner->del_ref();
-    frame->code_object->del_ref();
-    for (auto it: frame->iters) {
-        if (it) it->del_ref();
-    }
-    delete frame;
+    unwind_op_stack_to(frame->bp);
+    destroy_frame(frame);
 
-    /// 储存module
+    /// 储存module（以规范化路径为缓存键）
     push_to_stack(module_obj);
 
     module_obj->make_ref();
-    modules_cache.insert(module_path, module_obj);
+    modules_cache.insert(cache_key, module_obj);
 
     /// 抵消上一次的幽灵持有
     module_obj->del_ref();

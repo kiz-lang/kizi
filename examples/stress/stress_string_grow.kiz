@@ -1,0 +1,10 @@
+# 压力：字符串反复倍增（UTF-8与堆分配；22次倍增约4MB）
+N = 22
+s = "x"
+i = 0
+while i < N
+    s = s + s
+    i = i + 1
+end
+print("final length:", len(s) == 2 ^ N)
+print("last char ok:", s[0] == "x")

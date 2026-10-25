@@ -1,7 +1,15 @@
 cmake_minimum_required(VERSION 3.10)
 
+# 版本号单一事实源：仓库根目录的VERSION文件（用 scripts/bump_version.py 更新）
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" KIZ_VERSION_FILE)
+string(STRIP "${KIZ_VERSION_FILE}" KIZ_VERSION)
+string(REPLACE "." ";" KIZ_VERSION_PARTS "${KIZ_VERSION}")
+list(GET KIZ_VERSION_PARTS 0 KIZ_VERSION_MAJOR)
+list(GET KIZ_VERSION_PARTS 1 KIZ_VERSION_MINOR)
+list(GET KIZ_VERSION_PARTS 2 KIZ_VERSION_PATCH)
+
 project(kiz
-        VERSION 0.8.0
+        VERSION ${KIZ_VERSION}
         LANGUAGES CXX)
 
 add_compile_options(-Ofast)
@@ -11,20 +19,6 @@ add_compile_options(-Ofast)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-
-# 版本号定义
-set(KIZ_VERSION_MAJOR 0)
-set(KIZ_VERSION_MINOR 8)
-set(KIZ_VERSION_PATCH 0)
-set(KIZ_VERSION "${KIZ_VERSION_MAJOR}.${KIZ_VERSION_MINOR}.${KIZ_VERSION_PATCH}")
-
-# 配置版本头文件（生成到构建目录）
-# 注意：如果 version.hpp.in 实际在 include/ 下，改为 ${PROJECT_SOURCE_DIR}/include/version.hpp.in
-configure_file(
-        ${PROJECT_SOURCE_DIR}/src/version.hpp.in  # 按你实际路径调整
-        ${CMAKE_CURRENT_BINARY_DIR}/include/version.hpp
-        @ONLY
-)
 
 # ===================== 手动枚举所有 .cpp 文件（仅列cpp，无hpp） =====================
 set(SRC_FILES
@@ -77,6 +71,7 @@ set(CLI_FILES
         ${PROJECT_SOURCE_DIR}/src/error/src_manager.cpp
         ${PROJECT_SOURCE_DIR}/src/repl/repl.cpp
         ${PROJECT_SOURCE_DIR}/src/repl/repl_readline.cpp
+        ${PROJECT_SOURCE_DIR}/src/test_runner.cpp
         ${PROJECT_SOURCE_DIR}/src/main.cpp
 
 )
@@ -139,7 +134,6 @@ if(BUILD_WASM)
             ${PROJECT_SOURCE_DIR}/src
             ${PROJECT_SOURCE_DIR}/depends
             ${PROJECT_SOURCE_DIR}/libs
-            ${CMAKE_CURRENT_BINARY_DIR}/include
             ${EMSCRIPTEN_ROOT_PATH}/system/include
     )
 
@@ -173,7 +167,6 @@ else()
             ${PROJECT_SOURCE_DIR}/src
             ${PROJECT_SOURCE_DIR}/depends
             ${PROJECT_SOURCE_DIR}/libs
-            ${CMAKE_CURRENT_BINARY_DIR}/include
     )
 
     if (APPLE)

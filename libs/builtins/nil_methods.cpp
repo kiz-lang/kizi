@@ -1,3 +1,9 @@
+/**
+ * @file nil_methods.cpp
+ * @brief Nil类型的魔术方法实现
+ * @author azhz1107cat
+ * @date 2026-10-25
+ */
 #include "../../src/models/models.hpp"
 
 namespace model {
@@ -12,7 +18,8 @@ Object* nil_eq(Object* self, const List* args) {
 
 // Nil.__hash__
 Object* nil_hash(Object* self, const List* args) {
-    return kiz::Vm::small_int_pool[0];
+    // 哈希带类型前缀：防止Nil与Int 0混同为同一字典键
+    return new Int(dep::BigInt(dep::hash_string("Nil")));
 }
 
 Object* nil_str(Object* self, const List* args) {

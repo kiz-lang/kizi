@@ -1,3 +1,9 @@
+/**
+ * @file int_methods.cpp
+ * @brief Int类型的魔术方法实现
+ * @author azhz1107cat
+ * @date 2026-10-25
+ */
 #include "../../depends/u8str.hpp"
 #include "../../src/models/models.hpp"
 #include "../../src/vm/vm.hpp"
@@ -10,25 +16,32 @@ Object* int_call(Object* self, const List* args) {
     auto a = builtin::get_one_arg(args);
     dep::BigInt val(0);
     if (auto s = dynamic_cast<String*>(a)) {
-        auto str = dep::UTF8String(s->val);
-        bool is_digit = true;
-        for (const auto& c : str) {
-            if (!c.is_digit()) is_digit = false;
+        // 允许一个前导负号的整数字符串
+        const std::string& text = s->val;
+        size_t start = (text.size() > 0 && text[0] == '-') ? 1 : 0;
+        bool is_digit = text.size() > start; // 至少要有一个数字
+        for (size_t i = start; i < text.size(); ++i) {
+            if (text[i] < '0' || text[i] > '9') is_digit = false;
         }
         if (is_digit) {
-            val = dep::BigInt(s->val);
+            val = dep::BigInt(text);
         } else {
             throw NativeFuncError("TypeError", "Cannot cast this string to Int");
         }
     }
-    if (auto i = dynamic_cast<Int*>(a)) {
-        val = dep::BigInt(i->val);
+    else if (auto i = dynamic_cast<Int*>(a)) {
+        val = i->val;
     }
-    if (auto i = dynamic_cast<Decimal*>(a)) {
-        val = dep::BigInt(i->val.integer_part());
+    else if (auto d = dynamic_cast<Decimal*>(a)) {
+        val = d->val.integer_part();
     }
-
-    else if (!kiz::Vm::is_true(a)) val = dep::BigInt(0);
+    else if (auto b = dynamic_cast<Bool*>(a)) {
+        // True→1 / False→0，不能静默落回0
+        val = dep::BigInt(b->val ? 1 : 0);
+    }
+    else {
+        throw NativeFuncError("TypeError", "Cannot cast this type to Int");
+    }
     return new Int(val);
 }
 
@@ -146,6 +159,15 @@ Object* int_pow(Object* self, const List* args) {
     if (! exp_int)
         throw NativeFuncError("TypeError", "function Int.pow second arg need be Int");
 
+    // 结果规模上限：估算结果十进制位数，防止一行脚本算出数亿位大数耗尽内存
+    dep::BigInt base_abs = self_int->val.abs();
+    if (base_abs > dep::BigInt(1) and !exp_int->val.is_negative()) {
+        dep::BigInt est_digits = dep::BigInt(base_abs.to_string().size()) * exp_int->val;
+        if (est_digits > dep::BigInt(10000000)) {
+            throw NativeFuncError("CalculateError", "Int.pow: result too large");
+        }
+    }
+
     // 指数非负时返回Int，负指数返回Decimal（扩展支持）
     if (exp_int->val.is_negative()) {
         dep::Decimal base_dec(self_int->val);
@@ -159,13 +181,20 @@ Object* int_pow(Object* self, const List* args) {
     }
 };
 
-// Int.__mod__ 整数取模：self % args[0]（仅支持Int）
+// Int.__mod__ 整数取模：self % args[0]
 Object* int_mod(Object* self, const List* args) {
     kiz::Vm::assert_argc(1, args);
 
     auto another_int = dynamic_cast<Int*>(args->val[0]);
-    if (! another_int)
-        throw NativeFuncError("TypeError", "function Int.mod second arg need be Int");
+    // 与Decimal混合：转Decimal取模（与Int.__add__的跨类型行为一致）
+    if (!another_int) {
+        if (auto another_dec = dynamic_cast<Decimal*>(args->val[0])) {
+            const auto self_int_mixed = dynamic_cast<Int*>(self);
+            dep::Decimal left_dec(self_int_mixed->val);
+            return new Decimal(left_dec.mod(another_dec->val));
+        }
+        throw NativeFuncError("TypeError", "function Int.mod second arg need be Int or Decimal");
+    }
 
     if(another_int->val == dep::BigInt(0))
         throw NativeFuncError("CalculateError", "mod by zero");
@@ -244,7 +273,8 @@ Object* int_gt(Object* self, const List* args) {
 // Int.__hash__
 Object* int_hash(Object* self, const List* args) {
     auto self_int = dynamic_cast<Int*>(self);
-    return new Int(self_int->val);
+    // 哈希带类型前缀：防止Int 1与Bool true/Str "1"等不同类型哈希撞车导致字典键混同
+    return new Int(dep::BigInt(dep::hash_string("Int:" + self_int->val.to_string())));
 }
 
 Object* int_str(Object* self, const List* args) {

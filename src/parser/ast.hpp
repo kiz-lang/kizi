@@ -28,7 +28,7 @@ enum class AstType {
     AssignStmt, NonlocalAssignStmt, GlobalAssignStmt,
     SetMemberStmt, SetItemStmt,
     BlockStmt, IfStmt, WhileStmt,
-    ReturnStmt, ImportStmt, ForStmt, TryStmt, CatchStmt, EnsureStmt,
+    ReturnStmt, ImportStmt, ForStmt, TryStmt, CatchStmt,
     NullStmt, ExprStmt,
     BreakStmt, NextStmt, ThrowStmt, ObjectStmt, NamedFuncDeclStmt
 };
@@ -264,17 +264,6 @@ struct TryStmt final :  Stmt {
         this->ast_type = AstType::TryStmt;
     }
 };
-
-// ensure语句
-struct EnsureStmt final :  Stmt {
-    std::unique_ptr<Expr> expr;
-    explicit EnsureStmt(const err::PositionInfo& pos, std::unique_ptr<Expr> e)
-        : expr(std::move(e)) {
-        this->pos = pos;
-        this->ast_type = AstType::EnsureStmt;
-    }
-};
-
 
 // 设置成员
 struct SetMemberStmt final :  Stmt {

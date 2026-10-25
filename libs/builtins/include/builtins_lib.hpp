@@ -1,3 +1,9 @@
+/**
+ * @file builtins_lib.hpp
+ * @brief builtins库初始化函数声明
+ * @author azhz1107cat
+ * @date 2026-10-25
+ */
 #pragma once
 #include "../../../src/models/models.hpp"
 #include "builtin_functions.hpp"

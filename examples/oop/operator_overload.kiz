@@ -1,0 +1,15 @@
+object Money
+    fn init(this, yuan)
+        this.yuan = yuan
+        return this
+    end
+    fn __add__(this, other)
+        return create(Money).init(this.yuan + other.yuan)
+    end
+    fn __str__(this)
+        return Str(this.yuan) + "元"
+    end
+end
+a = create(Money).init(10)
+b = create(Money).init(25)
+print(a + b)

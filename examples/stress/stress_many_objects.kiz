@@ -1,0 +1,19 @@
+# 压力：大量小对象与属性（Object分配 + attrs表）
+N = 5000
+objs = []
+i = 0
+while i < N
+    o = create()
+    o.id = i
+    o.name = "obj" + Str(i)
+    o.tags = [i % 7, i % 11]
+    objs.append(o)
+    i = i + 1
+end
+print("created:", len(objs))
+
+checksum = 0
+for o in objs
+    checksum = checksum + o.id + o.tags[0]
+end
+print("checksum ok:", checksum >= 0)

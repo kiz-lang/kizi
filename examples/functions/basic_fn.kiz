@@ -1,0 +1,8 @@
+fn add(a, b)
+    return a + b
+end
+fn no_parens
+    return "无括号声明"
+end
+print(add(1, 2))
+print(no_parens())

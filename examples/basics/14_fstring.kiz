@@ -1,0 +1,8 @@
+name = "kiz"
+ver = 0.9
+print(f"Hello {name}")
+print(f"{name} v{ver}")
+print(f"expr: {1 + 2 * 3}")
+print(f"nested: {f"{name}!"}")
+d = {"k": 1}
+print(f"dict: {d}")

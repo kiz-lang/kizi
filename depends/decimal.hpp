@@ -1,3 +1,9 @@
+/**
+ * @file decimal.hpp
+ * @brief 无限精度小数（Decimal）核心定义与实现（精确十进制表示）
+ * @author azhz1107cat
+ * @date 2026-10-25
+ */
 #pragma once
 #include "bigint.hpp"
 #include <string>
@@ -40,9 +46,14 @@ class Decimal {
     static int align_exponent(const Decimal& a, const Decimal& b, BigInt& a_mant, BigInt& b_mant) {
         // 找到更小的指数（公共指数）
         int common_exp = std::min(a.exponent_, b.exponent_);
-        // 计算每个数需要放大的倍数：10^(原指数 - 公共指数)
-        int a_scale = a.exponent_ - common_exp;
-        int b_scale = b.exponent_ - common_exp;
+        // 用64位计算缩放差，避免int相减溢出UB
+        long long a_scale = static_cast<long long>(a.exponent_) - common_exp;
+        long long b_scale = static_cast<long long>(b.exponent_) - common_exp;
+        // 巨大的指数差意味着要把尾数放大到10^上亿位，属于OOM/挂死向量，直接拒绝
+        constexpr long long max_scale = 10000000;  // 允许的最大指数差（一千万位）
+        if (a_scale > max_scale || b_scale > max_scale) {
+            throw NativeFuncError("CalculateError", "Decimal exponent difference too large");
+        }
 
         BigInt ten(10);
         // 放大尾数，使两者指数都等于common_exp
@@ -65,12 +76,11 @@ public:
         normalize();
     }
 
-    // 修复：整数构造函数（原逻辑没问题，但补充注释）
-    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
-    explicit Decimal(T val) : mantissa_(BigInt(static_cast<size_t>(std::abs(val)))), exponent_(0) {
-        if (val < 0) {
-            mantissa_ = BigInt(0) - mantissa_;
-        }
+    // 修复：整数构造函数（排除char等字符类型误入；走有符号BigInt构造避免abs(INT_MIN) UB）
+    template <typename T, typename = std::enable_if_t<
+        std::is_integral_v<T> && !std::is_same_v<T, char> && !std::is_same_v<T, char8_t>
+        && !std::is_same_v<T, signed char> && !std::is_same_v<T, unsigned char>>>
+    explicit Decimal(T val) : mantissa_(BigInt(static_cast<long long>(val))), exponent_(0) {
         normalize();
     }
 
@@ -120,7 +130,7 @@ public:
             }
             // 指数部分只能包含数字
             for (size_t i = exp_start; i < exp_part.length(); ++i) {
-                if (!std::isdigit(exp_part[i])) {
+                if (!std::isdigit(static_cast<unsigned char>(exp_part[i]))) {
                     throw NativeFuncError("ParseError", "Invalid character in exponent");
                 }
             }
@@ -147,7 +157,7 @@ public:
             // 整数部分可以为空（如 ".123"），但至少小数部分要有数字
             if (!int_part.empty()) {
                 for (char c : int_part) {
-                    if (!std::isdigit(c)) {
+                    if (!std::isdigit(static_cast<unsigned char>(c))) {
                         throw NativeFuncError("ParseError", "Invalid character in integer part");
                     }
                 }
@@ -157,7 +167,7 @@ public:
                 throw NativeFuncError("ParseError", "Decimal point without fractional digits");
             }
             for (char c : frac_part) {
-                if (!std::isdigit(c)) {
+                if (!std::isdigit(static_cast<unsigned char>(c))) {
                     throw NativeFuncError("ParseError", "Invalid character in fractional part");
                 }
             }
@@ -165,7 +175,7 @@ public:
             // 没有小数点，整个部分必须是数字
             int_part = mantissa_part;
             for (char c : int_part) {
-                if (!std::isdigit(c)) {
+                if (!std::isdigit(static_cast<unsigned char>(c))) {
                     throw NativeFuncError("ParseError", "Invalid character in integer part");
                 }
             }
@@ -182,6 +192,11 @@ public:
             }
         }
 
+        // 解析出的指数量级校验（stoi 合法但巨大的值在此拦截）
+        if (exp > 10000000 || exp < -10000000) {
+            throw NativeFuncError("ParseError", "Exponent magnitude too large");
+        }
+
         // 构造尾数和指数（沿用原有逻辑）
         if (dot_pos == std::string::npos) {
             // 无小数点：整数
@@ -191,7 +206,13 @@ public:
             // 有小数点：拼接整数和小数部分
             std::string mant_str = (int_part.empty() ? "0" : int_part) + frac_part;
             mantissa_ = BigInt(mant_str);
-            exponent_ = exp - static_cast<int>(frac_part.size());
+            // 用64位计算避免int溢出UB
+            long long exp_ll = static_cast<long long>(exp) - static_cast<long long>(frac_part.size());
+            constexpr long long max_exp = 10000000;  // 指数量级上限，防OOM
+            if (exp_ll > max_exp || exp_ll < -max_exp) {
+                throw NativeFuncError("ParseError", "Exponent magnitude too large");
+            }
+            exponent_ = static_cast<int>(exp_ll);
         }
 
         // 应用符号
@@ -354,10 +375,14 @@ public:
         }
         Decimal res;
         res.mantissa_ = mant_pow;
-        // 修复：指数应该乘以 exp，而不是使用 static_cast<int>
-        // 需要将 BigInt 转换为 int，但要注意溢出
-        BigInt exp_int = exp;
-        res.exponent_ = exponent_ * static_cast<int>(exp_int.to_unsigned_long_long());
+        // 指数乘法用64位计算并检查范围，防止截断与溢出UB
+        unsigned long long exp_ull = exp.to_unsigned_long_long();
+        long long new_exp = static_cast<long long>(exponent_) * static_cast<long long>(exp_ull);
+        constexpr long long max_exp = 10000000;  // 指数量级上限，防OOM
+        if (new_exp > max_exp || new_exp < -max_exp) {
+            throw NativeFuncError("CalculateError", "Decimal pow result exponent too large");
+        }
+        res.exponent_ = static_cast<int>(new_exp);
         res.normalize();
         return res;
     }
@@ -365,10 +390,10 @@ public:
     // 在Decimal类中添加一个新的div_round方法
     [[nodiscard]] Decimal div_round(const Decimal& other, int n=10) const {
         if (other.mantissa_ == BigInt(0)) {
-            throw NativeFuncError("Calculate", "Division by zero");
+            throw NativeFuncError("CalculateError", "Division by zero");
         }
         if (n < 0) {
-            throw NativeFuncError("Calculate", "n must be non-negative");
+            throw NativeFuncError("CalculateError", "n must be non-negative");
         }
 
         // 先计算到n+1位小数
@@ -446,7 +471,10 @@ public:
      * @return 如果从小数点第1位到第n位都相等，返回true
      */
     [[nodiscard]] bool decimal_weekeq(const Decimal& other, int n) const {
-        assert (n >= 0);
+        // 负精度无意义，直接报错（release下assert失效会引发巨型运算挂死）
+        if (n < 0) {
+            throw NativeFuncError("CalculateError", "decimal_weekeq: precision must be non-negative");
+        }
 
         // 如果两个数完全相等，直接返回true
         if (*this == other) {
@@ -489,7 +517,8 @@ public:
 
     [[nodiscard]] Decimal div(const Decimal& other, int n=10) const { // n改为int类型
         if (other.mantissa_ == BigInt(0)) {
-            throw KizStopRunningSignal();
+            // 除零必须抛可报告的错误，绝不能用停机信号代替（否则脚本静默退出）
+            throw NativeFuncError("CalculateError", "decimal_div: division by zero");
         }
         if (n < 0)
             throw NativeFuncError("CalculateError", "n must be non-negative");
@@ -512,6 +541,34 @@ public:
         res.exponent_ = -n; // 设置指数为 -n（如-10）
         res.normalize(); // 此时normalize会正确简化：5000000000 → 5，exponent_-10→-1
 
+        return res;
+    }
+
+    /// 取模（floor语义，与Int.mod一致）：r = a - b*floor(a/b)
+    [[nodiscard]] Decimal mod(const Decimal& other) const {
+        if (other.mantissa_ == BigInt(0)) {
+            throw NativeFuncError("CalculateError", "decimal_mod: division by zero");
+        }
+        if (mantissa_ == BigInt(0)) {
+            return Decimal(BigInt(0));
+        }
+
+        BigInt a_mant, b_mant;
+        int common_exp = align_exponent(*this, other, a_mant, b_mant);
+
+        // 截断商与余数（BigInt为C截断语义）
+        BigInt q = a_mant / b_mant;
+        BigInt r = a_mant % b_mant;
+        // floor调整：余数非零且商为负方向时，商再减一
+        if (r != BigInt(0) && (a_mant.is_negative() != b_mant.is_negative())) {
+            q -= BigInt(1);
+        }
+
+        // r = a - b*q（对齐后的尾数直接相减）
+        Decimal res;
+        res.mantissa_ = a_mant - b_mant * q;
+        res.exponent_ = common_exp;
+        res.normalize();
         return res;
     }
 

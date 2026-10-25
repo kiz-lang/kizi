@@ -1,0 +1,4 @@
+vals = [1, 1.5, "s", True, Nil, [1], {"k":1}, print, type]
+for v in vals
+    print(type(v))
+end

@@ -126,10 +126,12 @@ std::string Repl::get_whole_input(std::istream *is, std::ostream *os) {
 
     std::string input;
     char ch;
+    // 非终端（管道/重定向）时不做Shift检测：既省去每字符的系统调用，也避免管道误触发续行
+    const bool interactive = isatty(fileno(stdin));
 
     while (is->get(ch)) { // 直接判断流状态，get失败（eof/fail）时退出
-        // 使用Shift+Enter组合键继续输入
-        if (if_pressing_shift() && ch == '\n') {
+        // 先判换行再做Shift检测（系统调用代价高，不应每个字符都触发）
+        if (interactive && ch == '\n' && if_pressing_shift()) {
             *os << Color::BRIGHT_MAGENTA << "... " << Color::RESET;
             os->flush();
             input += '\n';
@@ -140,12 +142,10 @@ std::string Repl::get_whole_input(std::istream *is, std::ostream *os) {
         }
     }
 
-    // 处理EOF（用户按Ctrl+D/Ctrl+Z）
+    // 处理EOF（用户按Ctrl-D/Ctrl+Z）：正常退出而非伪装成Panic，退出码0
     if (input.empty() && is->eof()) {
-        std::cout << Color::BOLD <<
-            Color::BRIGHT_RED << "A Panic!" << Color::RESET
-            << Color::WHITE << " : " << "EOF received, exit REPL" << Color::RESET << "\n";
-        exit(1);
+        *os << "Bye!" << Color::RESET << std::endl;
+        exit(0);
     }
 
     DEBUG_OUTPUT("final returns input (EOF): " << input);

@@ -1,0 +1,11 @@
+# 压力：深层嵌套容器（拷贝语义的递归深度）
+deep = [0]
+i = 0
+while i < 300
+    deep = [deep]
+    i = i + 1
+end
+print("nested depth:", i)
+
+copy = deep
+print("copied ok")

@@ -1,0 +1,4 @@
+print(True and True)
+print(False and 1/0 == 0.1 == False or True)
+print(False or 1)
+print(True or 1 == 2)

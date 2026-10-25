@@ -1,0 +1,18 @@
+object Card
+    fn init(this, rank)
+        this.rank = rank
+        return this
+    end
+    fn __str__(this)
+        return f"<{this.rank}>"
+    end
+    fn __eq__(this, other)
+        return this.rank == other.rank
+    end
+end
+c1 = create(Card).init(7)
+c2 = create(Card).init(7)
+c3 = create(Card).init(9)
+print(c1, c2, c3)
+print(c1 == c2)
+print(c1 == c3)

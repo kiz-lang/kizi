@@ -1,5 +1,0 @@
-fn a ()
-    throw Error("RuntimeError", "foo")
-end
-
-a()

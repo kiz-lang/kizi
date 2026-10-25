@@ -1,3 +1,9 @@
+/**
+ * @file builtin_methods.hpp
+ * @brief 各内置类型的魔术方法声明
+ * @author azhz1107cat
+ * @date 2026-10-25
+ */
 #pragma once
 #include <functional>
 
@@ -7,6 +13,7 @@ namespace model {
 
 // Object类型
 Object* object_str(Object* self, const List* args);
+Object* object_bool(Object* self, const List* args);
 Object* object_eq(Object* self, const List* args);
 Object* object_setitem(Object* self, const List* args);
 Object* object_getitem(Object* self, const List* args);
@@ -32,6 +39,7 @@ Object* decimal_add(Object* self, const List* args);
 Object* decimal_sub(Object* self, const List* args);
 Object* decimal_mul(Object* self, const List* args);
 Object* decimal_div(Object* self, const List* args);
+Object* decimal_mod(Object* self, const List* args);
 Object* decimal_pow(Object* self, const List* args);
 Object* decimal_neg(Object* self, const List* args);
 Object* decimal_eq(Object* self, const List* args);
@@ -58,9 +66,12 @@ Object* bool_str(Object* self, const List* args);
 
 // String 类型原生函数
 Object* str_eq(Object* self, const List* args);
+Object* str_lt(Object* self, const List* args);
+Object* str_gt(Object* self, const List* args);
 Object* str_add(Object* self, const List* args);
 Object* str_mul(Object* self, const List* args);
 Object* str_contains(Object* self, const List* args);
+Object* str_find(Object* self, const List* args);
 Object* str_call(Object* self, const List* args);
 Object* str_bool(Object* self, const List* args);
 Object* str_hash(Object* self, const List* args);

@@ -295,13 +295,11 @@ void IRGenerator::gen_expr(Expr* expr) {
             code_chunks.back().free_names,
             code_chunks.back().upvalues,
             code_chunks.back().var_names.size(),
-            code_chunks.back().exception_tables,
-            code_chunks.back().ensure_stmts
+            code_chunks.back().exception_tables
         );
         code_chunks.pop_back();
 
-        // 生成lambda函数体IR
-        code_obj->make_ref();
+        // Function构造函数内部会对code->make_ref()，这里无需再手动持有
         const auto lambda_fn = new model::Function(
             lambda->name.empty() ? "<lambda>" : lambda->name,
             code_obj,

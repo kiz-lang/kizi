@@ -1,0 +1,32 @@
+# 基准：字典插入/查找（含扩容路径与Int哈希）
+WARMUP = 1000
+N = 20000
+
+d = {}
+i = 0
+while i < WARMUP
+    d[i] = i
+    i = i + 1
+end
+
+start = now()
+d = {}
+i = 0
+while i < N
+    d[i] = i * 2
+    i = i + 1
+end
+mid = now() - start
+
+hits = 0
+i = 0
+while i < N
+    if d.contains(i)
+        hits = hits + 1
+    end
+    i = i + 1
+end
+elapsed = now() - start
+print("dict_insert", N, ":", mid, "ns")
+print("dict_lookup", N, ":", elapsed - mid, "ns", "hits:", hits == N)
+print("len:", len(d) == N)

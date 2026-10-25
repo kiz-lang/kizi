@@ -1,34 +1,20 @@
 set_project("kiz")
-set_version("0.8.0")
+-- 版本号单一事实源：仓库根目录的VERSION文件（用 scripts/bump_version.py 更新）
+-- 描述域沙箱禁用io，只能借$(shell)读取；configvar的数值在配置期展开
+set_version("$(shell cat VERSION)")
 set_languages("c++20")
 
-rule("version")
-    set_extensions(".in")
-    on_build_file(function (target, source_file, opt)
-        -- 读取文件内容
-        local content = io.readfile(source_file)
-        if content then
-            -- 进行文本替换，例如替换版本号
-            content = content:gsub("@KIZ_VERSION_MAJOR@", "0")
-            content = content:gsub("@KIZ_VERSION_MINOR@", "8")
-            content = content:gsub("@KIZ_VERSION_PATCH@", "0")
-            content = content:gsub("@KIZ_VERSION@", "0.8.0")
-            -- 将新内容写回文件（或写入新位置）
-            local target_file = path.join("cmake-build-debug/include", string.sub(path.filename(source_file), 1, #path.filename(source_file) - 3)) -- 去掉 .in 后缀
-            io.writefile(target_file, content)
-        end
-    end)
-
+set_configvar("KIZ_VERSION", "$(shell cat VERSION)")
+set_configvar("KIZ_VERSION_MAJOR", "$(shell cut -d. -f1 VERSION)")
+set_configvar("KIZ_VERSION_MINOR", "$(shell cut -d. -f2 VERSION)")
+set_configvar("KIZ_VERSION_PATCH", "$(shell cut -d. -f3 VERSION)")
 
 target("kiz")
     set_kind("binary")
 
-    add_files("src/version.hpp.in", {rule = "version"}) -- 添加版本文件，并应用版本规则
-
-    -- 入口文件
     add_files("src/main.cpp")
+    add_files("src/test_runner.cpp")
 
-    -- 编译器模块
     add_files("src/lexer/lexer.cpp")
     add_files("src/lexer/read_string.cpp")
     add_files("src/lexer/read_number.cpp")
@@ -36,29 +22,24 @@ target("kiz")
     add_files("src/parser/parse_expr.cpp")
     add_files("src/parser/parse_stmt.cpp")
 
-    -- IR 生成模块
     add_files("src/ir_gen/ir_gen.cpp")
     add_files("src/ir_gen/gen_expr.cpp")
     add_files("src/ir_gen/gen_stmt.cpp")
 
-    -- VM 核心模块
     add_files("src/vm/vm.cpp")
     add_files("src/vm/entry_std_modules.cpp")
     add_files("src/vm/entry_builtins.cpp")
-
     add_files("src/vm/execute_unit.cpp")
     add_files("src/vm/handle_import.cpp")
     add_files("src/vm/handle_error.cpp")
     add_files("src/vm/handle_call.cpp")
     add_files("src/vm/handle_make.cpp")
 
-    -- 工具模块
     add_files("src/error/error_reporter.cpp")
     add_files("src/error/src_manager.cpp")
     add_files("src/repl/repl.cpp")
     add_files("src/repl/repl_readline.cpp")
 
-    -- lib 模块
     add_files("libs/builtins/bool_methods.cpp")
     add_files("libs/builtins/int_methods.cpp")
     add_files("libs/builtins/decimal_methods.cpp")
@@ -67,19 +48,20 @@ target("kiz")
     add_files("libs/builtins/list_methods.cpp")
     add_files("libs/builtins/dict_methods.cpp")
     add_files("libs/builtins/builtin_functions.cpp")
-    add_files("libs/os/os_lib.cpp")
-    add_files("libs/builtins/builtins_lib.cpp")
     add_files("libs/builtins/file_handle_methods.cpp")
+    add_files("libs/builtins/builtins_lib.cpp")
     add_files("libs/builtins/object_methods.cpp")
+    add_files("libs/os/os_lib.cpp")
 
-    -- 设置头文件搜索路径
     add_includedirs("src")
     add_includedirs("depends")
     add_includedirs("libs")
-    add_includedirs("cmake-build-debug/include") -- 生成的version.hpp
 
-    -- 设置编译选项
     set_optimize("fastest")
-    if is_os("windows") then
+
+    if is_plat("macosx") then
+        add_frameworks("CoreFoundation", "CoreGraphics")
+    end
+    if is_plat("windows") then
         add_syslinks("user32")
     end

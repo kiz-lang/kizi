@@ -1,0 +1,10 @@
+try
+    try
+        1 / 0
+    catch e (CalculateError)
+        print("内层:", e.__msg__)
+        throw e
+    end
+catch e2 (CalculateError)
+    print("外层再次捕获:", e2.__msg__)
+end

@@ -1,0 +1,4 @@
+print(Int("123"), Int("-45"), Int(2.9))
+print(Str(42), Str(1.5))
+print(Decimal("1.5e3"))
+print(Int(True), Int(False))

@@ -1,0 +1,24 @@
+# 基准：列表操作（append/pop/contains/下标）
+WARMUP = 1000
+N = 20000
+
+xs = []
+i = 0
+while i < WARMUP
+    xs.append(i)
+    i = i + 1
+end
+xs = []
+
+start = now()
+i = 0
+xs = []
+while i < N
+    xs.append(i)
+    i = i + 1
+end
+while len(xs) > 0
+    xs.pop()
+end
+elapsed = now() - start
+print("list_append_pop", N * 2, "ops:", elapsed, "ns")

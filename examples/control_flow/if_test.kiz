@@ -1,0 +1,13 @@
+a = 0
+try
+    a = Int(input(">>>"))
+catch e (EOFError)
+    a = 0
+end
+if a is 0
+    print("a is 0")
+else if a > 0
+    print("positive")
+else
+    print("negative")
+end

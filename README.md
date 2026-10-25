@@ -1,6 +1,6 @@
 <div align="center">
 <img src="https://user3082.cn.imgto.link/public/20260225/segment.svg" width="250" alt="kiz logo">
-<h1> kiz v0.8.0 🎉</h1>
+<h1> kiz v0.9.0 🎉</h1>
 </div>
 
 📌 **现状: 提速改造, 修复bug与预发布正式版本(2026.1)...**
@@ -39,7 +39,6 @@ kiz-lang 是一门 **语法优雅**、面向对象（原型链模型）、动态
 
 - [项目结构与功能说明](docs/项目结构与功能说明.md)
 - [kiz库开发指南](docs/kiz库开发指南.md)
-- [已知Bug清单](docs/已知Bug清单.md)
 - [提交issue/bug-report/feature-request/pull-request指南](docs/提交指南.md)
 
 ## 🔆 项目结构
@@ -57,7 +56,7 @@ kiz-lang 是一门 **语法优雅**、面向对象（原型链模型）、动态
 - **Depends**: 非业务工具类(Bigint, Decimal, Utf8String, HashMap, Dict)
 
 ## 📃 TODO
-- 优化位置信息储存, 完善GC, 完善ensure(defer)语句
+- 优化位置信息储存, 完善GC
 
 ## 🪄 在线体验(已死，更换新链接中(逃))
 - **官网**: [kiz.random321.com](http://kiz.random321.com)

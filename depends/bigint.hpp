@@ -261,10 +261,24 @@ public:
         if (val == 0) { digits_.push_back(0); return; }
         while (val > 0) { digits_.push_back(static_cast<uint8_t>(val % 10)); val /= 10; }
     }
+    // 精确匹配unsigned long long，避免与long long重载产生转换二义性
+    BigInt(unsigned long long val) : is_negative_(false) {
+        if (val == 0) { digits_.push_back(0); return; }
+        while (val > 0) { digits_.push_back(static_cast<uint8_t>(val % 10)); val /= 10; }
+    }
+    // 有符号重载：防止负整数经隐式转换到size_t后变成巨大无符号数
+    BigInt(long long val) : is_negative_(val < 0) {
+        auto mag = is_negative_ ? static_cast<unsigned long long>(-(val + 1)) + 1 : static_cast<unsigned long long>(val);
+        if (mag == 0) { digits_.push_back(0); return; }
+        while (mag > 0) { digits_.push_back(static_cast<uint8_t>(mag % 10)); mag /= 10; }
+    }
+    BigInt(int val) : BigInt(static_cast<long long>(val)) {}
     BigInt(const std::string& s) : is_negative_(false) {
         if (s.empty()) { digits_.push_back(0); return; }
         size_t start_idx = 0;
         if (s[0] == '-') { is_negative_ = true; start_idx = 1; }
+        // 仅一个负号没有数字：按0处理，避免构造出空digits的非法状态
+        if (s.size() == start_idx) { digits_.push_back(0); is_negative_ = false; return; }
         for (auto it = s.rbegin(); it != s.rend() - start_idx; ++it) {
             if (*it < '0' || *it > '9') { digits_ = {0}; is_negative_ = false; return; }
             digits_.push_back(static_cast<uint8_t>(*it - '0'));
@@ -272,10 +286,17 @@ public:
         trim_leading_zeros();
     }
     BigInt(BigInt&& other) noexcept : digits_(std::move(other.digits_)), is_negative_(other.is_negative_) {
-        other.digits_.clear(); other.is_negative_ = false;
+        // moved-from对象重置为合法的0状态（而非空digits），保证其后的比较/运算自洽
+        other.digits_.assign(1, 0);
+        other.is_negative_ = false;
     }
     BigInt& operator=(BigInt&& other) noexcept {
-        if (this != &other) { digits_ = std::move(other.digits_); is_negative_ = other.is_negative_; other.digits_.clear(); other.is_negative_ = false; }
+        if (this != &other) {
+            digits_ = std::move(other.digits_);
+            is_negative_ = other.is_negative_;
+            other.digits_.assign(1, 0);
+            other.is_negative_ = false;
+        }
         return *this;
     }
 
@@ -410,9 +431,9 @@ public:
         // 无符号取模（得到非负余数）
         BigInt remainder = div_mod_unsigned(a_abs, b_abs).second;
 
-        // 调整余数符号（与被除数一致）
+        // 截断语义（与C一致）：余数符号与被除数一致
         if (this->is_negative_ && remainder != BigInt(0)) {
-            remainder = remainder - b_abs; // 非零负余数：remainder = - (b_abs - remainder)
+            remainder.is_negative_ = true;
         }
 
         remainder.trim_leading_zeros();
@@ -512,8 +533,8 @@ public:
             throw NativeFuncError("CalculateError","BigInt is negative, cannot convert to unsigned long long");
         }
 
-        // 检查是否超出范围
-        const BigInt ull_max_big(ULLONG_MAX);
+        // 检查是否超出范围（显式走size_t构造，避免与long long重载二义）
+        const BigInt ull_max_big(static_cast<size_t>(ULLONG_MAX));
         if (*this > ull_max_big) {
             throw NativeFuncError("CalculateError","BigInt value exceeds ULLONG_MAX");
         }

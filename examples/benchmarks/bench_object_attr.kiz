@@ -1,0 +1,27 @@
+# 基准：对象属性读写（attrs表 + 值语义拷贝）
+object P
+    fn init(this, x)
+        this.x = x
+        return this
+    end
+end
+
+WARMUP = 2000
+N = 20000
+
+o = create(P).init(0)
+i = 0
+while i < WARMUP
+    o.x = i
+    i = i + 1
+end
+
+start = now()
+i = 0
+while i < N
+    o.x = i
+    v = o.x
+    i = i + 1
+end
+elapsed = now() - start
+print("object_attr", N * 2, "ops:", elapsed, "ns", "last:", v == N - 1)

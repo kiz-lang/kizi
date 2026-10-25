@@ -1,0 +1,6 @@
+x = 1
+fn set_global
+    global x = 99
+end
+set_global()
+print(x)

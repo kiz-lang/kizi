@@ -1,0 +1,12 @@
+x = 15
+if x > 20
+    print("big")
+else if x > 10
+    if x % 2 == 1
+        print("中等奇数")
+    else
+        print("中等偶数")
+    end
+else
+    print("small")
+end

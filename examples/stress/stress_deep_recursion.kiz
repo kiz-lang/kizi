@@ -1,0 +1,8 @@
+# 压力：深递归（接近kiz调用栈上限）
+fn count(n)
+    if n == 0
+        return 0
+    end
+    return 1 + count(n - 1)
+end
+print("depth 50000:", count(50000) == 50000)

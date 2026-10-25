@@ -53,34 +53,6 @@ void IRGenerator::gen_block(const BlockStmt* block) {
             );
             break;
         }
-        case AstType::EnsureStmt: {
-            auto ensure = dynamic_cast<EnsureStmt*>(stmt.get());
-            size_t old_size = code_chunks.back().code_list.size();
-            gen_expr(ensure->expr.get()); // 生成defer块的指令
-
-            // 计算新生成的指令范围
-            size_t new_size = code_chunks.back().code_list.size();
-            if (new_size > old_size) {
-                //正向复制指令
-                std::vector<Instruction> defer_block;
-                defer_block.reserve(new_size - old_size);
-                for (size_t i = old_size; i < new_size; ++i) {
-                    defer_block.push_back(code_chunks.back().code_list[i]);
-                }
-
-                // 删除原code_list中的这些指令（保留顺序删除）
-                code_chunks.back().code_list.erase(
-                    code_chunks.back().code_list.begin() + old_size,
-                    code_chunks.back().code_list.end()
-                );
-
-                code_chunks.back().ensure_stmts.insert(
-                    code_chunks.back().ensure_stmts.begin(),
-                    defer_block.begin(),
-                    defer_block.end());
-            }
-            break;
-        }
         case AstType::AssignStmt: {
             // 变量声明：生成初始化表达式IR + 存储变量指令
             const auto var_decl = dynamic_cast<AssignStmt*>(stmt.get());
@@ -309,7 +281,7 @@ void IRGenerator::gen_if(IfStmt* if_stmt) {
     code_chunks.back().code_list[jump_else_idx].opn = code_chunks.back().code_list.size();
 }
 
-void IRGenerator::gen_fn_decl(NamedFuncDeclStmt* func) {
+size_t IRGenerator::gen_fn_decl(NamedFuncDeclStmt* func) {
     // 创建函数体
     code_chunks.back().var_names.push_back(func->name);
     code_chunks.emplace_back(CodeChunk());
@@ -360,13 +332,11 @@ void IRGenerator::gen_fn_decl(NamedFuncDeclStmt* func) {
         code_chunks.back().free_names,
         code_chunks.back().upvalues,
         code_chunks.back().var_names.size(),
-        code_chunks.back().exception_tables,
-        code_chunks.back().ensure_stmts
+        code_chunks.back().exception_tables
     );
     code_chunks.pop_back();
 
-    // 生成函数体IR
-    code_obj->make_ref();
+    // Function构造函数内部会对code->make_ref()，这里无需再手动持有
     const auto fn = new model::Function(
         func->name,
         code_obj,
@@ -374,8 +344,8 @@ void IRGenerator::gen_fn_decl(NamedFuncDeclStmt* func) {
     );
     fn->has_rest_params = func->has_rest_params;
 
-
-    // 加载函数对象
+    // 顺序不可变：必须先SET_LOCAL再LOAD_VAR+CREATE_CLOSURE
+    // （递归函数体通过upvalue引用自身时，捕获upvalue要求局部槽位已就位）
     const size_t fn_const_idx = get_or_add_const(fn);
     code_chunks.back().code_list.emplace_back(
         Opcode::LOAD_CONST,
@@ -384,7 +354,6 @@ void IRGenerator::gen_fn_decl(NamedFuncDeclStmt* func) {
     );
 
     const size_t name_idx = get_or_add_name(code_chunks.back().var_names, func->name);
-
     code_chunks.back().code_list.emplace_back(
         Opcode::SET_LOCAL,
         name_idx,
@@ -402,9 +371,19 @@ void IRGenerator::gen_fn_decl(NamedFuncDeclStmt* func) {
         0,
         func->pos
     );
+
+    // 再补一次SET_LOCAL：把携带捕获的闭包对象写回局部槽位
+    // （CREATE_CLOSURE会克隆出独立闭包，若不写回，槽位仍是未捕获的原函数）
+    code_chunks.back().code_list.emplace_back(
+        Opcode::SET_LOCAL,
+        name_idx,
+        func->pos
+    );
+
+    return name_idx;
 }
 
-void IRGenerator::gen_object_stmt(ObjectStmt* obj_decl) {
+size_t IRGenerator::gen_object_stmt(ObjectStmt* obj_decl) {
     const size_t name_idx = get_or_add_name(code_chunks.back().var_names, obj_decl->name);
 
     code_chunks.back().code_list.emplace_back(
@@ -419,7 +398,24 @@ void IRGenerator::gen_object_stmt(ObjectStmt* obj_decl) {
         obj_decl->pos
     );
 
+    // 继承：加载对象与父对象，将__parent__属性设置为父对象
     if (!obj_decl->parent_name.empty()) {
+        // 编译期校验父对象名可解析，避免运行期局部槽位为空导致晦涩的VM内部错误
+        bool parent_resolvable = false;
+        if (std::ranges::find(Vm::builtin_names, obj_decl->parent_name) != Vm::builtin_names.end()) {
+            parent_resolvable = true;
+        }
+        for (const auto& code_chunk : code_chunks) {
+            if (std::ranges::find(code_chunk.var_names, obj_decl->parent_name) != code_chunk.var_names.end()) {
+                parent_resolvable = true;
+                break;
+            }
+        }
+        if (!parent_resolvable) {
+            err::error_reporter(file_path, obj_decl->pos, "NameError",
+                "Undefined parent object '" + obj_decl->parent_name + "'");
+        }
+
         const size_t parent_name_idx = get_or_add_name(code_chunks.back().var_names, obj_decl->parent_name);
 
         code_chunks.back().code_list.emplace_back(
@@ -434,7 +430,7 @@ void IRGenerator::gen_object_stmt(ObjectStmt* obj_decl) {
             obj_decl->pos
         );
 
-        const size_t parent_text_idx = get_or_add_name(code_chunks.back().attr_names, "__parent__");
+        const size_t parent_text_idx = get_or_add_name(code_chunks.back().attr_names, model::magic_name::parent);
         code_chunks.back().code_list.emplace_back(
             Opcode::SET_ATTR,
             parent_text_idx,
@@ -442,53 +438,76 @@ void IRGenerator::gen_object_stmt(ObjectStmt* obj_decl) {
         );
     }
 
-    for (const auto& sub_assign: obj_decl->body->statements) {
-        if (const auto sub_assign_stmt = dynamic_cast<AssignStmt*>(sub_assign.get())) {
+    // 成员统一按“生成值 -> 挂到对象属性”递归处理，不依赖任何指令布局
+    for (const auto& member_stmt: obj_decl->body->statements) {
+        if (const auto assign_stmt = dynamic_cast<AssignStmt*>(member_stmt.get())) {
             code_chunks.back().code_list.emplace_back(
                 Opcode::LOAD_VAR,
                 name_idx,
                 obj_decl->pos
             );
-            assert(sub_assign_stmt->expr.get());
-            gen_expr(sub_assign_stmt->expr.get());
+            assert(assign_stmt->expr.get());
+            gen_expr(assign_stmt->expr.get()); // 值表达式递归生成
 
-            const size_t sub_name_idx = get_or_add_name(code_chunks.back().attr_names, sub_assign_stmt->name);
-
+            const size_t attr_idx = get_or_add_name(code_chunks.back().attr_names, assign_stmt->name);
             code_chunks.back().code_list.emplace_back(
                 Opcode::SET_ATTR,
-                sub_name_idx,
+                attr_idx,
                 obj_decl->pos
             );
-        } else if (auto f_decl = dynamic_cast<NamedFuncDeclStmt*>(sub_assign.get())) {
-            gen_fn_decl(f_decl);
-            // 定位到set local指令
-            auto set_func_instr = code_chunks.back().code_list[code_chunks.back().code_list.size() - 3];
+        } else if (const auto f_decl = dynamic_cast<NamedFuncDeclStmt*>(member_stmt.get())) {
+            // 方法成员：递归生成函数声明，用其返回的名字下标取回函数对象
+            const size_t fn_name_idx = gen_fn_decl(f_decl);
+
             code_chunks.back().code_list.emplace_back(
                 Opcode::LOAD_VAR,
                 name_idx,
-                set_func_instr.pos
+                f_decl->pos
             );
 
             code_chunks.back().code_list.emplace_back(
                 Opcode::LOAD_VAR,
-                set_func_instr.opn,
-                set_func_instr.pos
+                fn_name_idx,
+                f_decl->pos
             );
 
-            auto sub_func_name = code_chunks.back().var_names[set_func_instr.opn];
-            auto sub_func_name_idx = get_or_add_name(code_chunks.back().attr_names, sub_func_name);
+            const size_t attr_idx = get_or_add_name(code_chunks.back().attr_names, f_decl->name);
             code_chunks.back().code_list.emplace_back(
                 Opcode::SET_ATTR,
-                sub_func_name_idx,
-                set_func_instr.pos
+                attr_idx,
+                f_decl->pos
+            );
+        } else if (const auto nested_decl = dynamic_cast<ObjectStmt*>(member_stmt.get())) {
+            // 嵌套object：递归生成内层对象，再作为外层的一个属性挂接
+            const size_t nested_name_idx = gen_object_stmt(nested_decl);
+
+            code_chunks.back().code_list.emplace_back(
+                Opcode::LOAD_VAR,
+                name_idx,
+                nested_decl->pos
+            );
+
+            code_chunks.back().code_list.emplace_back(
+                Opcode::LOAD_VAR,
+                nested_name_idx,
+                nested_decl->pos
+            );
+
+            const size_t attr_idx = get_or_add_name(code_chunks.back().attr_names, nested_decl->name);
+            code_chunks.back().code_list.emplace_back(
+                Opcode::SET_ATTR,
+                attr_idx,
+                nested_decl->pos
             );
         } else {
             err::error_reporter(file_path, obj_decl->pos,
                 "SyntaxError",
-                "Object Statement cannot include other code or other object statement (only assign and function statement support)"
+                "Object Statement cannot include other code (only assign, function and object statement support)"
             );
         }
     }
+
+    return name_idx;
 }
 
 void IRGenerator::gen_while(WhileStmt* while_stmt) {

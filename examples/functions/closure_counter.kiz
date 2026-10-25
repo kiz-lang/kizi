@@ -1,0 +1,11 @@
+make_counter = fn
+    n = 0
+    return fn
+        nonlocal n = n + 1
+        return n
+    end
+end
+c1 = make_counter()
+c2 = make_counter()
+print(c1(), c1(), c1())
+print(c2())

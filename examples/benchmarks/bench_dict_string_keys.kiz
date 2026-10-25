@@ -1,0 +1,24 @@
+# 基准：字符串键字典（FNV哈希与Str哈希前缀）
+N = 10000
+d = {}
+
+start = now()
+i = 0
+while i < N
+    d["key_" + Str(i)] = i
+    i = i + 1
+end
+insert_elapsed = now() - start
+
+start = now()
+hits = 0
+i = 0
+while i < N
+    if d.contains("key_" + Str(i))
+        hits = hits + 1
+    end
+    i = i + 1
+end
+lookup_elapsed = now() - start
+print("dict_str_insert", N, ":", insert_elapsed, "ns")
+print("dict_str_lookup", N, ":", lookup_elapsed, "ns", "hits:", hits == N)

@@ -1,0 +1,14 @@
+# 不加catch时，未捕获错误会打印完整traceback（各层调用位置）后以非零码退出。
+# 这里为了保持示例可自动化运行而捕获；想看traceback效果可注释掉try/catch。
+try
+    fn inner
+        o = create()
+        return o.no_such_method()
+    end
+    fn outer
+        inner()
+    end
+    outer()
+catch e (NameError)
+    print("捕获NameError:", e.__msg__)
+end

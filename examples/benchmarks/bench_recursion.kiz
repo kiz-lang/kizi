@@ -1,0 +1,16 @@
+# 基准：递归深度与调用栈
+fn fib(n)
+    if n <= 1
+        return n
+    end
+    return fib(n - 1) + fib(n - 2)
+end
+
+WARMUP = fib(15)
+N = 25
+
+start = now()
+r = fib(N)
+elapsed = now() - start
+print("recursion fib(" + Str(N) + ") =", r, "in", elapsed, "ns")
+print("warmup_ignored:", WARMUP > 0)

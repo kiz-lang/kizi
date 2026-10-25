@@ -1,0 +1,10 @@
+fns = []
+i = 0
+while i < 3
+    fn mk
+        return i * 10
+    end
+    fns.append(mk)
+    i = i + 1
+end
+print(fns[0](), fns[1](), fns[2]())

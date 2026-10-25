@@ -1,0 +1,8 @@
+err = Error("MyErr", "自定义")
+try
+    throw err
+catch e (MyErr)
+    print("名字:", e.__name__)
+    print("消息:", e.__msg__)
+    print("整体:", e)
+end

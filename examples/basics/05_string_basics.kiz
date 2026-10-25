@@ -1,0 +1,7 @@
+s = "hello"
+print(s + " world")
+print(s * 3)
+print(len(s))
+print(s.contains("ell"))
+print(s[1])
+print(s.substr(1, 3))

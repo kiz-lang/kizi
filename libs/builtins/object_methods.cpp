@@ -1,3 +1,9 @@
+/**
+ * @file object_methods.cpp
+ * @brief Object/Range/Error/Function/Module等类型的方法实现
+ * @author azhz1107cat
+ * @date 2026-10-25
+ */
 #include "../../src/models/models.hpp"
 #include "include/builtin_functions.hpp"
 
@@ -8,16 +14,23 @@ Object* object_str(Object* self, const List* args) {
     return new String("<Object at " + model::ptr_to_string(self) + ">");
 }
 
+// 缺省真值：任何对象默认为真（否则 if obj 会因缺__bool__直接报错）
+Object* object_bool(Object* self, const List* args) {
+    return load_true();
+}
+
 Object* object_eq(Object* self, const List* args) {
     const auto other_obj = builtin::get_one_arg(args);
     return model::load_bool(self == other_obj);
 }
 
 Object* object_setitem(Object* self, const List* args) {
-    assert(args->val.size() == 2);
+    kiz::Vm::assert_argc(2, args);
     auto attr = args->val[0];
     auto attr_str = dynamic_cast<model::String*>(attr);
-    assert(attr_str != nullptr);
+    // 下标必须是Str：此前是assert断言，非法输入会直接abort整个解释器
+    if (!attr_str)
+        throw NativeFuncError("TypeError", "Object index must be a String");
     self->attrs_insert(attr_str->val, args->val[1]);
     return self;
 }
@@ -25,7 +38,9 @@ Object* object_setitem(Object* self, const List* args) {
 Object* object_getitem(Object* self, const List* args) {
     auto attr = builtin::get_one_arg(args);
     auto attr_str = dynamic_cast<model::String*>(attr);
-    assert(attr_str != nullptr);
+    // 下标必须是Str：此前是assert断言，非法输入会直接abort整个解释器
+    if (!attr_str)
+        throw NativeFuncError("TypeError", "Object index must be a String");
     return kiz::Vm::get_attr(self, attr_str->val);
 }
 
@@ -74,7 +89,11 @@ Object* range_next(Object* self, const List* args) {
     bool is_end = false;
     if (step_int > 0) {
         is_end = current >= end_int;
+    } else if (step_int < 0) {
+        // 负步长：向下计数到end
+        is_end = current <= end_int;
     } else {
+        // 步长为0永不产出
         return load_stop_iter_signal();
     }
 

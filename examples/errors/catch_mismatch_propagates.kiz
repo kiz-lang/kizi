@@ -1,0 +1,9 @@
+try
+    try
+        throw Error("A", "类型A")
+    catch e (B)
+        print("不会执行")
+    end
+catch e (A)
+    print("内层不匹配, 外层捕获A")
+end

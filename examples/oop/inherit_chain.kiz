@@ -1,0 +1,20 @@
+object A
+    fn who(this)
+        return "A"
+    end
+end
+object B: A
+    fn who(this)
+        f = A.who
+        return f(this) + "->B"
+    end
+end
+object C: B
+    fn who(this)
+        f = B.who
+        return f(this) + "->C"
+    end
+end
+c = create(C)
+print(c.who())
+print(ischild(c, A), ischild(c, B), ischild(c, C))

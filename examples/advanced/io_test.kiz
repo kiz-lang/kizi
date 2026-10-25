@@ -1,0 +1,3 @@
+f = open("for_test_io.txt", "r")
+print(f.read())
+f.close()

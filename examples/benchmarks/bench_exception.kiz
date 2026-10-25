@@ -1,0 +1,30 @@
+# 基准：异常抛出与捕获（错误对象构造/解栈/异常表查找）
+fn thrower
+    throw Error("Bench", "x")
+end
+
+WARMUP = 1000
+N = 10000
+
+i = 0
+while i < WARMUP
+    try
+        thrower()
+    catch e (Bench)
+    end
+    i = i + 1
+end
+
+start = now()
+i = 0
+caught = 0
+while i < N
+    try
+        thrower()
+    catch e (Bench)
+        caught = caught + 1
+    end
+    i = i + 1
+end
+elapsed = now() - start
+print("exception_roundtrip", N, ":", elapsed, "ns", "caught:", caught == N)

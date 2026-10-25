@@ -1,0 +1,8 @@
+object Greeter
+    fn __call__(this, name)
+        return "Hi, " + name + "!"
+    end
+end
+g = create(Greeter)
+print(g("kiz"))
+print(g("world"))

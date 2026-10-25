@@ -1,3 +1,9 @@
+/**
+ * @file dict_methods.cpp
+ * @brief Dict类型的魔术方法实现
+ * @author azhz1107cat
+ * @date 2026-10-25
+ */
 #include "../../src/models/models.hpp"
 #include "include/builtin_functions.hpp"
 
@@ -38,9 +44,9 @@ Object* dict_add(Object* self, const List* args) {
     
     auto new_dict = new Dictionary(dep::Dict(
         self_dict_to_vec
-    ));
-    new_dict->make_ref();
-    
+    )); // 构造内部为每个key/value make_ref
+
+    // 以借用指针返回，由handle_call压栈时持有
     return new_dict;
 };
 
@@ -72,10 +78,18 @@ Object* dict_setitem(Object* self, const List* args) {
     auto value_obj = args->val[1];
     dep::BigInt key_hash_val = hash_object(key_obj);
 
-    self_dict->val.insert(
+    // 值语义：存储前深拷贝可变值（防止d["k"] = d构造自引用结构导致打印/拷贝无限递归）
+    value_obj = model::copy_if_mutable(value_obj);
+    // 字典持有新的键值对
+    key_obj->make_ref();
+    value_obj->make_ref();
+    auto old_pair = self_dict->val.insert(
         key_hash_val,
         std::pair{key_obj, value_obj}
     );
+    // 覆盖同名键时释放旧键值对
+    if (old_pair.first) old_pair.first->del_ref();
+    if (old_pair.second) old_pair.second->del_ref();
     return load_nil();
 }
 
@@ -137,6 +151,7 @@ Object* dict_foreach(Object* self, const List* args) {
     dep::BigInt idx = 0;
     for (auto pair : self_dict->val.to_vector() | std::views::values) {
         kiz::Vm::call_function(func_obj, {pair.first, pair.second}, nullptr);
+        kiz::Vm::get_and_pop_stack_top(); // 丢弃并释放回调返回值
         idx += 1;
     }
     return load_nil();

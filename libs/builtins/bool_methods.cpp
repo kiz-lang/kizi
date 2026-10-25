@@ -1,3 +1,9 @@
+/**
+ * @file bool_methods.cpp
+ * @brief Bool类型的魔术方法实现
+ * @author azhz1107cat
+ * @date 2026-10-25
+ */
 #include "../../src/models/models.hpp"
 #include "include/builtin_functions.hpp"
 
@@ -32,10 +38,8 @@ Object* bool_eq(Object* self, const List* args) {
 // Bool.__hash__
 Object* bool_hash(Object* self, const List* args) {
     auto self_bool = dynamic_cast<Bool*>(self);
-    if (self_bool->val == true) {
-        return kiz::Vm::small_int_pool[1];
-    }
-    return kiz::Vm::small_int_pool[0];
+    // 哈希带类型前缀：防止True与Int 1混同为同一字典键
+    return new Int(dep::BigInt(dep::hash_string(self_bool->val ? "Bool:true" : "Bool:false")));
 }
 
 

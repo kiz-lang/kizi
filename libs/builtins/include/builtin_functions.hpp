@@ -1,3 +1,9 @@
+/**
+ * @file builtin_functions.hpp
+ * @brief 全局内置函数声明与ischild等通用工具
+ * @author azhz1107cat
+ * @date 2026-10-25
+ */
 #pragma once
 #include <unordered_set>
 
@@ -61,5 +67,6 @@ model::Object* open(model::Object* self, const model::List* args);
 model::Object* assert_(model::Object* self, const model::List* args);
 model::Object* panic(model::Object* self, const model::List* args);
 model::Object* repeat(model::Object* self, const model::List* args);
+model::Object* len(model::Object* self, const model::List* args);
 
 }

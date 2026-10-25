@@ -15,11 +15,11 @@
 
 namespace kiz {
 
-// Token 类型
+/// Token 类型
 enum class TokenType {
     // 关键字
     Func, If, Else, While, Return, Import, Break, Object,
-    True, False, Nil, End, Next, Nonlocal, Global, Try, Catch, For, Throw, Ensure,
+    True, False, Nil, End, Next, Nonlocal, Global, Try, Catch, For, Throw,
     // 标识符
     Identifier,
     // 赋值运算符
@@ -46,7 +46,7 @@ enum class TokenType {
     EndOfFile, EndOfLine, Unknown
 };
 
-// Token定义：保持原有结构，pos为const
+/// Token定义：保持原有结构，pos为const
 struct Token {
     TokenType type;
     std::string text;
@@ -72,9 +72,7 @@ struct Token {
     ) : type(tp), text(std::move(t)), pos(pos_info) {}
 };
 
-// ======================================
-// 新增：有限自动状态机 状态枚举
-// ======================================
+/// 有限自动状态机 状态枚举
 enum class LexState {
     Start,          // 初始状态
     Identifier,     // 标识符/关键字
@@ -137,6 +135,10 @@ public:
         char_pos_ = 0;
         lineno_ = lineno_start;
         col_ = col_start;
+        // 跳过UTF-8 BOM（U+FEFF），Windows编辑器常见
+        if (src_.size() > 0 and src_[0].to_cod_point() == 0xFEFF) {
+            char_pos_ = 1;
+        }
     }
     std::vector<Token> tokenize();
     void read_string();

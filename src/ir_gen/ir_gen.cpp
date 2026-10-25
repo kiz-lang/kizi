@@ -77,8 +77,7 @@ model::CodeObject* IRGenerator::gen(std::unique_ptr<BlockStmt> ast_into, const s
         code_chunks.back().free_names,
         code_chunks.back().upvalues,
         code_chunks.back().var_names.size(),
-        code_chunks.back().exception_tables,
-        code_chunks.back().ensure_stmts
+        code_chunks.back().exception_tables
     );
 
     return code_obj;

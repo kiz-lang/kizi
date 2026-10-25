@@ -1,0 +1,6 @@
+a = [1, 2, 3]
+r1 = get_refc(a)
+b = a
+r2 = get_refc(a)
+print(r2 >= r1)
+print(get_refc(1) >= 0)

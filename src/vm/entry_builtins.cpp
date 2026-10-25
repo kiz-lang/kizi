@@ -1,3 +1,9 @@
+/**
+ * @file entry_builtins.cpp
+ * @brief 内置类型方法与全局内置函数的注册入口
+ * @author azhz1107cat
+ * @date 2026-10-25
+ */
 #include <format>
 
 #include "vm.hpp"
@@ -8,6 +14,9 @@
 namespace kiz {
 
 void Vm::entry_builtins() {
+    // 幂等保护：多Vm实例(测试循环等)重复注册会导致builtins向量线性膨胀与泄漏
+    if (!builtins.empty()) return;
+
     model::based_bool->attrs_insert("__parent__", model::based_obj);
     model::based_int->attrs_insert("__parent__", model::based_obj);
     model::unique_nil->attrs_insert("__parent__", model::based_obj);
@@ -29,6 +38,8 @@ void Vm::entry_builtins() {
     model::based_obj->attrs_insert("__parent__", model::based_based_obj);
     model::based_based_obj->attrs_insert("__eq__", model::create_nfunc(model::object_eq));
     model::based_based_obj->attrs_insert("__str__", model::create_nfunc(model::object_str));
+    // 缺省真值：任意对象默认为真
+    model::based_based_obj->attrs_insert("__bool__", model::create_nfunc(model::object_bool));
     model::based_based_obj->attrs_insert("__getitem__", model::create_nfunc(model::object_getitem));
     model::based_based_obj->attrs_insert("__setitem__", model::create_nfunc(model::object_setitem));
 
@@ -64,6 +75,7 @@ void Vm::entry_builtins() {
     model::based_decimal->attrs_insert("__sub__", model::create_nfunc(model::decimal_sub));
     model::based_decimal->attrs_insert("__mul__", model::create_nfunc(model::decimal_mul));
     model::based_decimal->attrs_insert("__div__", model::create_nfunc(model::decimal_div));
+    model::based_decimal->attrs_insert("__mod__", model::create_nfunc(model::decimal_mod));
     model::based_decimal->attrs_insert("__pow__", model::create_nfunc(model::decimal_pow));
     model::based_decimal->attrs_insert("__neg__", model::create_nfunc(model::decimal_neg));
     model::based_decimal->attrs_insert("__gt__", model::create_nfunc(model::decimal_gt));
@@ -79,7 +91,8 @@ void Vm::entry_builtins() {
 
     // Dictionary 类型魔法方法
     model::based_dict->attrs_insert("__add__", model::create_nfunc(model::dict_add));
-    model::based_dict->attrs_insert("__contains__", model::create_nfunc(model::dict_contains));
+    // 注册名与OP_IN调用的方法名统一为contains（此前注册成__contains__导致 in 对Dict不可用）
+    model::based_dict->attrs_insert("contains", model::create_nfunc(model::dict_contains));
     model::based_dict->attrs_insert("__getitem__", model::create_nfunc(model::dict_getitem));
     model::based_dict->attrs_insert("__str__", model::create_nfunc(model::dict_str));
     model::based_dict->attrs_insert("__dstr__", model::create_nfunc(model::dict_dstr));
@@ -118,6 +131,8 @@ void Vm::entry_builtins() {
     model::based_str->attrs_insert("__add__", model::create_nfunc(model::str_add));
     model::based_str->attrs_insert("__mul__", model::create_nfunc(model::str_mul));
     model::based_str->attrs_insert("__eq__", model::create_nfunc(model::str_eq));
+    model::based_str->attrs_insert("__lt__", model::create_nfunc(model::str_lt));
+    model::based_str->attrs_insert("__gt__", model::create_nfunc(model::str_gt));
     model::based_str->attrs_insert("__call__", model::create_nfunc(model::str_call));
     model::based_str->attrs_insert("__bool__", model::create_nfunc(model::str_bool));
     model::based_str->attrs_insert("__hash__", model::create_nfunc(model::str_hash));
@@ -127,6 +142,7 @@ void Vm::entry_builtins() {
     model::based_str->attrs_insert("__next__", model::create_nfunc(model::str_next));
 
     model::based_str->attrs_insert("contains", model::create_nfunc(model::str_contains));
+    model::based_str->attrs_insert("find", model::create_nfunc(model::str_find));
     model::based_str->attrs_insert("count", model::create_nfunc(model::str_count));
     model::based_str->attrs_insert("foreach", model::create_nfunc(model::str_foreach));
     model::based_str->attrs_insert("startswith", model::create_nfunc(model::str_startswith));
@@ -184,6 +200,8 @@ void Vm::entry_builtins() {
     builtin_insert("hasattr", model::create_nfunc(builtin::hasattr, "hasattr"));
     builtin_insert("range", model::create_nfunc(builtin::range, "range"));
     builtin_insert("type_of", model::create_nfunc(builtin::type_of_obj, "type_of"));
+    builtin_insert("type", model::create_nfunc(builtin::type_of_obj, "type"));
+    builtin_insert("len", model::create_nfunc(builtin::len, "len"));
     builtin_insert("debug_str", model::create_nfunc(builtin::debug_str, "debug_str"));
     builtin_insert("attr", model::create_nfunc(builtin::attr, "attr"));
     builtin_insert("sleep", model::create_nfunc(builtin::sleep, "sleep"));

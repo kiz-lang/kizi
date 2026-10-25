@@ -1,0 +1,9 @@
+apply_twice = |f, x| f(f(x))
+print(apply_twice(|v| v * 3, 2))
+
+fn compose(f, g)
+    return |x| f(g(x))
+end
+inc = |x| x + 1
+dbl = |x| x * 2
+print(compose(inc, dbl)(5))

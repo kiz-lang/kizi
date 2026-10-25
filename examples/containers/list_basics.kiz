@@ -1,0 +1,11 @@
+xs = [1, 2, 3]
+xs.append(4)
+print(xs)
+print(xs.pop())
+xs.extend([5, 6])
+print(xs)
+xs.insert(1, 99)
+print(xs)
+xs.reverse()
+print(xs)
+print(len(xs))

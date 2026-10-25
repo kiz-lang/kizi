@@ -1,0 +1,8 @@
+d = {"a": 1, "b": 2}
+d["c"] = 3
+print(d)
+print(d["a"], d["b"], d["c"])
+print(d.contains("b"))
+print(len(d))
+d["a"] = 99
+print(d["a"])

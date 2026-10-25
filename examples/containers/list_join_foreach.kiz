@@ -1,0 +1,10 @@
+words = ["kiz", "is", "fun"]
+print(words.join("-"))
+
+# foreach回调里的多行代码：用具名函数（参数列表不支持跨行lambda）
+firsts = []
+fn take_first(w)
+    firsts.append(w[0])
+end
+words.foreach(take_first)
+print(firsts)

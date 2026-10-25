@@ -64,7 +64,6 @@ struct CallFrame {
     std::vector<model::Object*> iters;
 
     model::Object* curr_error;
-    bool exec_ensure_stmt = false;
 };
 
 class StackRef {
@@ -96,6 +95,10 @@ public:
     static bool running;
     static std::string main_file_path;
 
+    ///| 原生函数"移除并返回"场景的所有权移交标志：
+    ///| 置位后handle_call压栈不再额外make_ref（返回值自带引用，如list_pop弹出的元素）
+    static thread_local bool native_return_owns;
+
     explicit Vm(const std::string& file_path_);
 
     ///| 核心执行循环
@@ -103,6 +106,13 @@ public:
     static void exec_curr_code();
     static void reset_global_code(model::CodeObject* code_object);
     static void execute_unit(const Instruction& instruction);
+
+    ///| 销毁一个调用帧：释放owner/code_object/iters/curr_error的引用并delete
+    ///| 调用前必须保证操作数栈已截断到该帧bp以下（帧内局部与临时值已释放）
+    static void destroy_frame(CallFrame* frame);
+
+    ///| 把操作数栈截断到指定大小，逐个释放被弹出对象的引用（跳过空槽位）
+    static void unwind_op_stack_to(size_t target_size);
 
     ///| 栈操作
     static CallFrame* get_frame();
@@ -125,7 +135,6 @@ public:
 
     ///| 处理报错(设置到catch)或者进行traceback
     static void handle_throw();
-    static void handle_ensure();
 
     ///| 注册内置对象
     static void entry_builtins();

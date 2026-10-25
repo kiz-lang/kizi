@@ -23,19 +23,53 @@ std::unique_ptr<Expr> Parser::parse_expression() {
     return parse_and_or(); // 直接调用合并后的函数
 }
 
-// 处理 and/or（优先级相同，左结合）
+// 处理or（最低优先级，左结合）
 std::unique_ptr<Expr> Parser::parse_and_or() {
-    DEBUG_OUTPUT("parsing and/or expression...");
+    DEBUG_OUTPUT("parsing or expression...");
+    auto node = parse_and();
+
+    while (curr_token().type == TokenType::Or) {
+        auto op_token = skip_token(curr_token().text);
+        auto right = parse_and();
+        node = std::make_unique<BinaryExpr>(
+            curr_token().pos,
+            std::move(op_token.text),
+            std::move(node),
+            std::move(right)
+        );
+    }
+    return node;
+}
+
+// 处理and（优先级高于or，左结合）
+std::unique_ptr<Expr> Parser::parse_and() {
+    DEBUG_OUTPUT("parsing and expression...");
+    auto node = parse_in_is();
+
+    while (curr_token().type == TokenType::And) {
+        auto op_token = skip_token(curr_token().text);
+        auto right = parse_in_is();
+        node = std::make_unique<BinaryExpr>(
+            curr_token().pos,
+            std::move(op_token.text),
+            std::move(node),
+            std::move(right)
+        );
+    }
+    return node;
+}
+
+// 处理is/in（优先级介于and与相等比较之间，左结合）
+std::unique_ptr<Expr> Parser::parse_in_is() {
+    DEBUG_OUTPUT("parsing is/in expression...");
     auto node = parse_comparison();
-    
+
     while (
-        curr_token().type == TokenType::And
-        or curr_token().type == TokenType::Or
-        or curr_token().type == TokenType::Is
+        curr_token().type == TokenType::Is
         or curr_token().type == TokenType::In
     ) {
         auto op_token = skip_token(curr_token().text);
-        auto right = parse_comparison(); // 解析右侧比较表达式
+        auto right = parse_comparison();
         node = std::make_unique<BinaryExpr>(
             curr_token().pos,
             std::move(op_token.text),
@@ -115,6 +149,7 @@ std::unique_ptr<Expr> Parser::parse_power() {
 
 std::unique_ptr<Expr> Parser::parse_unary() {
     DEBUG_OUTPUT("parsing unary...");
+    NestGuard depth_guard(*this); // 连续一元运算符嵌套深度保护
     if (curr_token().type == TokenType::Not) {
         auto op_token = skip_token(); // 跳过 not
         auto operand = parse_unary(); // 右结合
@@ -188,6 +223,7 @@ std::unique_ptr<Expr> Parser::parse_factor() {
 
 std::unique_ptr<Expr> Parser::parse_primary() {
     DEBUG_OUTPUT("parsing primary...");
+    NestGuard depth_guard(*this); // 括号/列表/字典嵌套深度保护
     const auto tok = skip_token();
     // 处理f-string解析
     if (tok.type == TokenType::FStringStart) {
@@ -225,9 +261,16 @@ std::unique_ptr<Expr> Parser::parse_primary() {
                 auto tokens = lexer.tokenize();
                 auto ast = parser.parse(tokens);
 
-                assert(ast != nullptr);
+                // 空子表达式（如f"{ }"、f"{#}"）解析出零语句：给出可读错误而不是空向量back()崩溃
+                if (ast->statements.empty()) {
+                    err::error_reporter(file_path, insert_expr_start_tok.pos, "SyntaxError",
+                        "Empty expression in f-string");
+                }
                 auto expr_ast = dynamic_cast<ExprStmt*>(ast->statements.back().get());
-                assert(expr_ast != nullptr);
+                if (expr_ast == nullptr) {
+                    err::error_reporter(file_path, insert_expr_start_tok.pos, "SyntaxError",
+                        "Invalid expression in f-string");
+                }
 
                 std::unique_ptr<Expr> sub_expr = std::move(expr_ast->expr);
 

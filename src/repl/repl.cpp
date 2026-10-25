@@ -52,6 +52,17 @@ void Repl::loop() {
             }
             eval_and_print(code, old_size + 1);
         } catch (KizStopRunningSignal& e) {
+            // 恢复VM状态：销毁残留的函数帧并截断操作数栈，保证下一行输入可继续执行
+            while (kiz::Vm::call_stack.size() > 1) {
+                auto frame = kiz::Vm::call_stack.back();
+                kiz::Vm::call_stack.pop_back();
+                kiz::Vm::unwind_op_stack_to(frame->bp);
+                kiz::Vm::destroy_frame(frame);
+            }
+            if (!kiz::Vm::call_stack.empty()) {
+                auto main_frame = kiz::Vm::call_stack.back();
+                kiz::Vm::unwind_op_stack_to(main_frame->bp + main_frame->code_object->locals_count);
+            }
             if (std::string(e.what()).empty()) {
                 continue;
             }

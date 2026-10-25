@@ -71,6 +71,7 @@ void Parser::skip_fn_type_comment() {
 // 需要end结尾的块
 std::unique_ptr<BlockStmt> Parser::parse_block(TokenType endswith) {
     DEBUG_OUTPUT("parsing block (with end)");
+    NestGuard depth_guard(*this); // 嵌套块深度保护
     std::vector<std::unique_ptr<Stmt>> block_stmts;
     auto block_tok = curr_token();
 
@@ -199,6 +200,16 @@ std::unique_ptr<Stmt> Parser::parse_stmt() {
                 }
             }
             skip_token(")");  // 跳过右括号
+
+            // 检查重复的参数名
+            for (size_t i = 0; i < func_params.size(); ++i) {
+                for (size_t j = i + 1; j < func_params.size(); ++j) {
+                    if (func_params[i] == func_params[j]) {
+                        err::error_reporter(file_path, tok.pos, "SyntaxError",
+                            "Duplicate parameter name '" + func_params[i] + "' in function '" + func_name + "'");
+                    }
+                }
+            }
         }
         skip_fn_type_comment();
 
@@ -331,14 +342,6 @@ std::unique_ptr<Stmt> Parser::parse_stmt() {
         return std::make_unique<ForStmt>(tok.pos, name, std::move(expr), std::move(for_block));
     }
 
-    // 解析ensure语句
-    if (curr_tok.type == TokenType::Ensure) {
-        auto tok = skip_token("ensure");
-        std::unique_ptr<Expr> expr = parse_expression();
-        skip_end_of_stmt();
-        return std::make_unique<EnsureStmt>(tok.pos, std::move(expr));
-    }
-    
     // 解析try语句
     if (curr_tok.type == TokenType::Try) {
         DEBUG_OUTPUT("parsing try");

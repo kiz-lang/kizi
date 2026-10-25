@@ -1,0 +1,22 @@
+# 基准：值语义深拷贝（列表赋值时的copy_if_mutable）
+src = range(100)
+
+WARMUP = 200
+N = 3000
+
+i = 0
+while i < WARMUP
+    c = src
+    i = i + 1
+end
+
+start = now()
+i = 0
+c = Nil
+while i < N
+    c = src
+    i = i + 1
+end
+elapsed = now() - start
+print("deep_copy_100elems", N, "copies:", elapsed, "ns")
+print("copied_len:", len(c) == 100)

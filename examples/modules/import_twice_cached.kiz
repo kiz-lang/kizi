@@ -1,0 +1,5 @@
+import helpers at "math_helpers.kiz"
+import h2 at "math_helpers.kiz"
+print(helpers.square(4))
+print(h2.cube(2))
+print("同一模块:", helpers.square == h2.square)

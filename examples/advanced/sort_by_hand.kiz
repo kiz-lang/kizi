@@ -1,0 +1,20 @@
+# 简单插入排序（kiz暂无内置排序）
+xs = [5, 2, 8, 1, 9, 3]
+sorted = []
+for x in xs
+    pos = len(sorted)
+    i = 0
+    while i < len(sorted)
+        if sorted[i] > x
+            pos = i
+            break
+        end
+        i = i + 1
+    end
+    if pos == len(sorted)
+        sorted.append(x)
+    else
+        sorted.insert(x, pos)
+    end
+end
+print(sorted)

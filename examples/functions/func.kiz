@@ -1,0 +1,19 @@
+global_var = 0
+fn a
+    nonlocal_var = 0
+    fn b
+        fn c
+            print(nonlocal_var)
+            nonlocal nonlocal_var = 100
+            global global_var = 99
+            local1 = 0
+            print(nonlocal_var)
+        end
+        c()
+    end
+    b()
+    print(nonlocal_var)
+end
+a()
+
+print(global_var)

@@ -1,0 +1,4 @@
+print(2 in [1, 2, 3])
+print("ell" in "hello")
+print("a" in {"a": 1})
+print(9 in [1, 2])

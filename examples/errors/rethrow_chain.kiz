@@ -1,0 +1,9 @@
+try
+    try
+        throw Error("Orig", "原始")
+    catch e (Orig)
+        throw Error("Wrapped", "包装:" + e.__msg__)
+    end
+catch e2 (Wrapped)
+    print(e2.__name__, e2.__msg__)
+end

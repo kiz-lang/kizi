@@ -26,7 +26,6 @@ void Lexer::init_keywords() {
         {"next", TokenType::Next},
         {"try", TokenType::Try},
         {"catch", TokenType::Catch},
-        {"ensure", TokenType::Ensure},
         {"throw", TokenType::Throw},
         {"import", TokenType::Import},
         {"nonlocal", TokenType::Nonlocal},
@@ -81,6 +80,52 @@ std::string Lexer::handle_escape(const std::string& raw) {
             case '\\': res += '\\'; break;
             case '"': res += '"'; break;
             case '\'': res += '\''; break;
+            case '0': res += '\0'; break;
+            case 'u': {
+                // \uXXXX：4位十六进制Unicode码点，编码为UTF-8
+                if (i + 4 < raw.size()) {
+                    uint32_t code_point = 0;
+                    bool valid = true;
+                    for (size_t j = 1; j <= 4; ++j) {
+                        char h = raw[i + j];
+                        code_point <<= 4;
+                        if (h >= '0' && h <= '9') code_point |= static_cast<uint32_t>(h - '0');
+                        else if (h >= 'a' && h <= 'f') code_point |= static_cast<uint32_t>(h - 'a' + 10);
+                        else if (h >= 'A' && h <= 'F') code_point |= static_cast<uint32_t>(h - 'A' + 10);
+                        else { valid = false; break; }
+                    }
+                    if (valid) {
+                        // 拒绝UTF-16代理区码点（孤立代理编码出的是非法UTF-8）
+                        if (code_point >= 0xD800 and code_point <= 0xDFFF) {
+                            valid = false;
+                        }
+                    }
+                    if (valid) {
+                        // 按码点长度编码UTF-8
+                        if (code_point < 0x80) {
+                            res += static_cast<char>(code_point);
+                        } else if (code_point < 0x800) {
+                            res += static_cast<char>(0xC0 | (code_point >> 6));
+                            res += static_cast<char>(0x80 | (code_point & 0x3F));
+                        } else if (code_point < 0x10000) {
+                            res += static_cast<char>(0xE0 | (code_point >> 12));
+                            res += static_cast<char>(0x80 | ((code_point >> 6) & 0x3F));
+                            res += static_cast<char>(0x80 | (code_point & 0x3F));
+                        } else {
+                            res += static_cast<char>(0xF0 | (code_point >> 18));
+                            res += static_cast<char>(0x80 | ((code_point >> 12) & 0x3F));
+                            res += static_cast<char>(0x80 | ((code_point >> 6) & 0x3F));
+                            res += static_cast<char>(0x80 | (code_point & 0x3F));
+                        }
+                        i += 4;
+                        break;
+                    }
+                }
+                // 十六进制不完整：按原样保留
+                res += '\\';
+                res += 'u';
+                break;
+            }
             default:
                 res += '\\';  // 保留转义符
                 res += raw[i]; // 和未知字符
@@ -321,6 +366,7 @@ std::vector<Token> Lexer::tokenize() {
             next(); // 消费第一个字符
 
             TokenType type = TokenType::Unknown;
+            bool manual_emitted = false; // :=别名分支手工产出token的标志
             size_t token_end = char_pos_;
 
             // 检查第二个字符
@@ -359,14 +405,15 @@ std::vector<Token> Lexer::tokenize() {
                     token_end = char_pos_;
                 }
                 else if (c1 == ':' && c2 == '=') {
-                    type = TokenType::Assign;
+                    // := 是 = 的别名写法：token文本统一为"="，与语法层按文本匹配保持一致
                     next(); // 消费第二个字符
-                    token_end = char_pos_;
+                    tokens_.emplace_back(TokenType::Assign, "=", start_lno, start_col);
+                    manual_emitted = true; // 已手工产token，跳过通用emit
                 }
             }
 
-            // 单字符运算符
-            if (type == TokenType::Unknown) {
+            // 单字符运算符（:=已手工产出时跳过）
+            if (type == TokenType::Unknown and !manual_emitted) {
                 token_end = char_pos_; // 只消费了一个字符
                 if (c1 == '=') type = TokenType::Assign;
                 else if (c1 == '!') type = TokenType::ExclamationMark;
@@ -376,7 +423,9 @@ std::vector<Token> Lexer::tokenize() {
                 else if (c1 == '-') type = TokenType::Minus;
             }
 
-            emit_token(type, start_char, token_end, start_lno, start_col, lineno_, col_ - 1);
+            if (!manual_emitted) {
+                emit_token(type, start_char, token_end, start_lno, start_col, lineno_, col_ - 1);
+            }
             curr_state_ = LexState::Start;
             break;
         }
@@ -396,9 +445,12 @@ std::vector<Token> Lexer::tokenize() {
 
         // 块注释状态：/* */ 支持跨行
         case LexState::BlockComment: {
+            const size_t comment_start_lno = lineno_;
+            const size_t comment_start_col = col_;
             next(); // 跳过/
             next(); // 跳过*
 
+            bool comment_closed = false;
             // 消费至*/
             while (char_pos_ < src_.size()) {
                 if (char_pos_ + 1 < src_.size() &&
@@ -406,9 +458,16 @@ std::vector<Token> Lexer::tokenize() {
                     src_[char_pos_ + 1] == '/') {
                     next(); // 跳过*
                     next(); // 跳过/
+                    comment_closed = true;
                     break;
                 }
                 next();
+            }
+
+            // 到达EOF仍未闭合：显式报错，不能静默吞掉剩余源码
+            if (!comment_closed) {
+                err::error_reporter(file_path_, {comment_start_lno, prev_lineno_, comment_start_col, prev_col_},
+                    "SyntaxError", "Unclosed block comment");
             }
 
             curr_state_ = LexState::Start;

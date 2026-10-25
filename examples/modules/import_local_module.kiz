@@ -1,0 +1,4 @@
+import helpers at "math_helpers.kiz"
+print(helpers.square(5))
+print(helpers.cube(3))
+print(helpers.E)

@@ -1,0 +1,8 @@
+w = open("_tmp_roundtrip.txt", "w")
+w.write("第一行\n第二行\n第三行")
+w.close()
+r = open("_tmp_roundtrip.txt", "r")
+print(r.read())
+r.close()
+import os
+os.remove("_tmp_roundtrip.txt")

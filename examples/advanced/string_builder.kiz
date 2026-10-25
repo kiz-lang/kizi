@@ -1,0 +1,5 @@
+parts = []
+for i in range(10)
+    parts.append(f"第{i}段")
+end
+print(parts.join(", "))

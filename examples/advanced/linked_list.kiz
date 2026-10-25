@@ -1,0 +1,22 @@
+object Node
+    fn init(this, val)
+        this.val = val
+        this.next = Nil
+        return this
+    end
+end
+
+head = create(Node).init(1)
+cur = head
+for v in [2, 3, 4]
+    cur.next = create(Node).init(v)
+    cur = cur.next
+end
+
+out = []
+n = head
+while n != Nil
+    out.append(n.val)
+    n = n.next
+end
+print(out)

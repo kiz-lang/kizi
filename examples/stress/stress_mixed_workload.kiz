@@ -1,0 +1,36 @@
+# 压力：混合负载（容器+对象+异常+闭包+字符串 同场竞技）
+ROUNDS = 40
+
+inventory = {}
+fn make_item(idx)
+    o = create()
+    o.idx = idx
+    o.label = "item-" + Str(idx)
+    return o
+end
+
+fn risky_parse(s)
+    if s % 13 == 0
+        throw Error("BadLuck", "13")
+    end
+    return s
+end
+
+r = 0
+thrown = 0
+while r < ROUNDS
+    i = 0
+    while i < 100
+        item = make_item(r * 100 + i)
+        inventory[item.label] = item
+        try
+            risky_parse(i)
+        catch e (BadLuck)
+            thrown = thrown + 1
+        end
+        i = i + 1
+    end
+    r = r + 1
+end
+print("inventory:", len(inventory) == ROUNDS * 100)
+print("exceptions thrown:", thrown > 0)

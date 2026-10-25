@@ -1,0 +1,6 @@
+big = 10 ^ 40
+print(big)
+print(big + 1)
+print(big * big)
+print(big ^ 2 == 10 ^ 80)
+print(-big + big)

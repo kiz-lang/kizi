@@ -33,7 +33,6 @@ struct CodeChunk {
     std::vector<model::UpValue> upvalues;
 
     std::vector<model::ExceptionTable> exception_tables;
-    std::vector<Instruction> ensure_stmts;
 };
 
 class IRGenerator {
@@ -42,7 +41,10 @@ class IRGenerator {
     const std::string& file_path;
 public:
     explicit IRGenerator(const std::string& file_path) : file_path(file_path) {}
-    model::CodeObject* gen(std::unique_ptr<BlockStmt> ast_into, const std::vector<std::string>& global_var_names_into = {});
+    model::CodeObject* gen(
+        std::unique_ptr<BlockStmt> ast_into,
+        const std::vector<std::string>& global_var_names_into = {}
+        );
 
     static size_t get_or_add_name(std::vector<std::string>& names, const std::string& name);
     static size_t get_or_add_const(model::Object* obj);
@@ -61,8 +63,10 @@ private:
     void gen_expr(Expr* expr);
 
     void gen_if(IfStmt* if_stmt);
-    void gen_fn_decl(NamedFuncDeclStmt* func);
-    void gen_object_stmt(ObjectStmt* stmt);
+    ///| 生成具名函数声明，返回函数名在所在代码块var_names中的下标
+    size_t gen_fn_decl(NamedFuncDeclStmt* func);
+    ///| 生成object语句，返回对象名在所在代码块var_names中的下标
+    size_t gen_object_stmt(ObjectStmt* stmt);
     void gen_while(WhileStmt* while_stmt);
 
     static model::Int* make_int_obj(const NumberExpr* num_expr);

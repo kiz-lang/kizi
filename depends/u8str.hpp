@@ -1,3 +1,9 @@
+/**
+ * @file u8str.hpp
+ * @brief UTF-8字符（UTF8Char）与UTF-8字符串（UTF8String）核心定义与实现
+ * @author azhz1107cat
+ * @date 2026-10-25
+ */
 #pragma once
 #include <cstdint>
 #include <cstring>
@@ -47,9 +53,13 @@ public:
         }
     }
 
-    UTF8Char(const char *buf, int len) : len_(len) {
+    UTF8Char(const char *buf, int len) {
+        // 钳制非法长度，防止len_记录越界值导致后续to_string栈越界读
+        if (len < 0) len = 0;
+        if (len > 4) len = 4;
+        len_ = len;
         memset(buf_, 0, 4);
-        if (buf && len > 0 && len <= 4) {
+        if (buf && len > 0) {
             memcpy(buf_, buf, len);
         }
     }
@@ -86,6 +96,13 @@ public:
         else return 0xFFFD; // Invalid UTF-8, return replacement character
 
         if (cplen != len_) return 0xFFFD;
+
+        // 校验续字节必须是10xxxxxx，非法序列统一回退替换字符
+        for (int i = 1; i < cplen; ++i) {
+            if ((static_cast<unsigned char>(buf_[i]) & 0xC0) != 0x80) {
+                return 0xFFFD;
+            }
+        }
 
         uint32_t code_point = 0;
         if (cplen == 1) {
@@ -275,8 +292,13 @@ public:
 
     UTF8String(const char* str) : actual_size_(0) {
         if (!str) return;
+        *this = UTF8String(str, strlen(str));
+    }
 
-        size_t len = strlen(str);
+    // 带显式长度的构造：支持内嵌NUL字节的数据
+    UTF8String(const char* str, size_t len) : actual_size_(0) {
+        if (!str) return;
+
         for (size_t i = 0; i < len; ) {
             auto byte = static_cast<unsigned char>(str[i]);
             int cplen = 0;
@@ -301,7 +323,8 @@ public:
         }
     }
 
-    UTF8String(const std::string& str) : UTF8String(str.c_str()) {}
+    // 用data()+size()构造，保留内嵌NUL字节（c_str()会在NUL处截断丢数据）
+    UTF8String(const std::string& str) : UTF8String(str.data(), str.size()) {}
 
     UTF8String(char c) : actual_size_(0) {
         if (c != '\0') {
@@ -385,6 +408,11 @@ public:
     }
 
     UTF8Char& operator[](size_t index) {
+        // 与const版本一致做边界检查，越界返回静态哑字符而不是堆越界写
+        if (index >= arr_.size()) {
+            static UTF8Char null_char;
+            return null_char;
+        }
         return arr_[index];
     }
 

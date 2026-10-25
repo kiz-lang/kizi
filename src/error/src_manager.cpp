@@ -30,6 +30,10 @@ std::vector<std::string> SrcManager::splitlines(const std::string& input) {
     std::string line;
 
     while (std::getline(stream, line)) {
+        // 剥离CRLF行尾残留的\r，保证错误上下文展示干净
+        if (!line.empty() and line.back() == '\r') {
+            line.pop_back();
+        }
         lines.push_back(line);
     }
 
@@ -43,15 +47,19 @@ std::string SrcManager::get_slice(const std::string& src_path, const size_t line
     std::string file_content = get_file_by_path(src_path);
     std::vector<std::string> lines = splitlines(file_content);
 
-    if (lineno_start > lines.size() or lineno_end > lines.size()) {
-        std::cout <<  "[Warning] Invalid line range: start=" << lineno_start
-                  << ", end=" << lineno_end << " (total lines: " << lines.size() << ")\n";
+    // 行号钳制到合法范围（防御上游异常位置信息）
+    const size_t safe_start = lineno_start == 0 ? 1 : lineno_start;
+    const size_t safe_end = lineno_end < safe_start ? safe_start : lineno_end;
+    if (safe_start > lines.size() or safe_end > lines.size()) {
+        // 警告属于诊断信息，走stderr不污染程序正常输出
+        std::cerr <<  "[Warning] Invalid line range: start=" << safe_start
+                  << ", end=" << safe_end << " (total lines: " << lines.size() << ")\n";
         return "";
     }
 
     std::string sliced_code;
-    const size_t start_idx = lineno_start - 1;
-    const size_t end_idx = lineno_end - 1;
+    const size_t start_idx = safe_start - 1;
+    const size_t end_idx = safe_end - 1;
     for (size_t i = start_idx; i <= end_idx; ++i) {
         sliced_code += lines[i] + '\n';
     }

@@ -1,0 +1,18 @@
+# 压力：分配/存活/释放交替（考验引用计数与vector扩缩容）
+ROUNDS = 50
+PER_ROUND = 2000
+
+i = 0
+total_created = 0
+while i < ROUNDS
+    batch = []
+    j = 0
+    while j < PER_ROUND
+        batch.append({"i": j, "s": Str(j)})
+        j = j + 1
+    end
+    total_created = total_created + len(batch)
+    batch = Nil
+    i = i + 1
+end
+print("alloc_churn done:", total_created, "objects created and released")

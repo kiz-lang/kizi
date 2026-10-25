@@ -1,0 +1,26 @@
+# 基准：闭包创建（Function克隆与free_vars捕获）
+fn make(n)
+    return fn
+        return n
+    end
+end
+
+WARMUP = 2000
+N = 20000
+
+i = 0
+while i < WARMUP
+    make(i)
+    i = i + 1
+end
+
+start = now()
+i = 0
+last = Nil
+while i < N
+    last = make(i)
+    i = i + 1
+end
+elapsed = now() - start
+print("closure_create", N, ":", elapsed, "ns")
+print("last_captured:", last())

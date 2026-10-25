@@ -1,13 +1,15 @@
+/**
+ * @file kiz.hpp
+ * @brief 全局公共定义（停机信号/原生函数错误/调试输出宏）
+ * @author azhz1107cat
+ * @date 2026-10-25
+ */
 #pragma once
 #include <iostream>
 #include <string>
 #include "repl/color.hpp"
 
-#ifdef __EMSCRIPTEN__
-#include "../../cmake-build-debug/include/version.hpp"
-#else
 #include "version.hpp"
-#endif
 
 // 调试模式开关
 #define IN_DEBUG
@@ -36,6 +38,14 @@ public:
 
     explicit KizStopRunningSignal(const std::string& msg) noexcept
         : std::runtime_error(msg) {}
+};
+
+// kiz层异常被handle_throw重定向到更外层处理帧后，用于穿透中间C++调用栈
+// (原生foreach/map等循环)回到拥有该处理帧的执行循环
+class KizUnwindSignal final : public std::runtime_error {
+public:
+    KizUnwindSignal() noexcept
+        : std::runtime_error("") {}
 };
 
 class NativeFuncError final : public std::runtime_error {

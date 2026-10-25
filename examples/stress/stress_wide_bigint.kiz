@@ -1,0 +1,18 @@
+# 压力：大数运算（数百位整数）
+base = 10 ^ 100 + 12345
+
+r = base
+i = 0
+while i < 50
+    r = r * base % (base - 7)
+    i = i + 1
+end
+print("wide bigint rounds done, digits:", len(Str(r)) <= 210)
+
+fact = 1
+i = 1
+while i <= 200
+    fact = fact * i
+    i = i + 1
+end
+print("200! digits:", len(Str(fact)))

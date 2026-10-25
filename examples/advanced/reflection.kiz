@@ -1,0 +1,9 @@
+o = create()
+o.a = 1
+setattr(o, "b", 2)
+print(getattr(o, "a"))
+print(getattr(o, "missing", "默认值"))
+print(hasattr(o, "b"))
+print(attr(o).contains("a"))
+delattr(o, "a")
+print(hasattr(o, "a"))

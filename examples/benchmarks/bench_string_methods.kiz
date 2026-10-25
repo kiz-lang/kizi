@@ -1,0 +1,26 @@
+# 基准：字符串方法（contains/find/substr/len）
+s = "the quick brown fox jumps over the lazy dog"
+WARMUP = 2000
+N = 20000
+
+i = 0
+while i < WARMUP
+    s.contains("fox")
+    i = i + 1
+end
+
+start = now()
+i = 0
+r = 0
+while i < N
+    if s.contains("fox")
+        r = r + 1
+    end
+    if s.find("dog") >= 0
+        r = r + 1
+    end
+    r = r + len(s.substr(i % 20, 5))
+    i = i + 1
+end
+elapsed = now() - start
+print("string_methods", N, "iters:", elapsed, "ns", "sink:", r > 0)

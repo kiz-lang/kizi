@@ -1,0 +1,19 @@
+# 历力：字典经历多次扩容（512→1024→…验证resize正确性）
+N = 50000
+d = {}
+i = 0
+while i < N
+    d[i] = i
+    i = i + 1
+end
+print("len:", len(d) == N)
+
+missing = 0
+i = 0
+while i < N
+    if not d.contains(i)
+        missing = missing + 1
+    end
+    i = i + 1
+end
+print("missing keys after resizes:", missing)

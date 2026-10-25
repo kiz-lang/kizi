@@ -109,7 +109,7 @@ public:
     // 析构函数（默认即可，shared_ptr自动释放内存）
     ~HashMap() = default;
 
-    // 插入/更新键值对（存在则更新，不存在则插入）
+    // 插入/更新键值对（存在则更新并返回旧值，不存在则插入并返回默认值）
     VT insert(const std::string& key, VT val) {
         if (buckets_.empty()) {
             buckets_.resize(16, nullptr);
@@ -123,8 +123,9 @@ public:
         std::shared_ptr<Node> current = buckets_[bucket_idx];
         while (current != nullptr) {
             if (current->hash == hash && current->key == key) {
+                VT old_val = std::move(current->value);
                 current->value = std::move(val);
-                return VT(); // 更新值，不递增计数
+                return old_val; // 更新值，不递增计数
             }
             current = current->next;
         }
@@ -147,6 +148,18 @@ public:
 
     [[nodiscard]] std::shared_ptr<Node> find(const std::string& key) const {
         return find_in_current(key);
+    }
+
+    // 直接遍历所有值（不构造中间vector，析构等热路径使用）
+    template<typename Func>
+    void for_each_value(Func&& f) const {
+        for (const auto& bucket_head : buckets_) {
+            auto current = bucket_head;
+            while (current != nullptr) {
+                f(current->value);
+                current = current->next;
+            }
+        }
     }
 
     // 仅在当前HashMap查找键（不递归父结构体）

@@ -1,0 +1,19 @@
+object Countdown
+    fn init(this, from)
+        this.cur = from
+        return this
+    end
+    fn __next__(this)
+        if this.cur <= 0
+            return __StopIterSignal__
+        end
+        this.cur = this.cur - 1
+        return this.cur + 1
+    end
+end
+cd = create(Countdown).init(5)
+for n in cd
+    print(n)
+end
+fresh = create(Countdown).init(3)
+print([...fresh])

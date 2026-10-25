@@ -1,0 +1,10 @@
+w = open("_tmp_lines.txt", "w")
+w.write("a\nb\nc")
+w.close()
+f = open("_tmp_lines.txt", "r")
+print(f.readline(1))
+print(f.readline(2))
+print(f.readline(3))
+f.close()
+import os
+os.remove("_tmp_lines.txt")

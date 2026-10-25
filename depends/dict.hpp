@@ -1,3 +1,9 @@
+/**
+ * @file dict.hpp
+ * @brief 键为BigInt哈希的字典容器（Dict）核心定义与实现
+ * @author azhz1107cat
+ * @date 2026-10-25
+ */
 #pragma once
 #include "bigint.hpp"
 #include <vector>
@@ -15,14 +21,15 @@ public:
     struct Bucket {
         BigInt key;          // 键类型改为 BigInt（支持哈希后的值）
         VT value;            // 值类型保持泛型
+        size_t hash_cache;   // 缓存键哈希，避免每次桶定位重复计算
         std::shared_ptr<Bucket> next;
 
         // 构造函数：直接接收 BigInt 键，无需计算字符串哈希
         Bucket(const BigInt& k, VT val)
-            : key(k), value(std::move(val)), next(nullptr) {}
+            : key(k), value(std::move(val)), hash_cache(hash_key(k)), next(nullptr) {}
 
         Bucket(BigInt&& k, VT&& val)
-            : key(std::move(k)), value(std::move(val)), next(nullptr) {}
+            : key(std::move(k)), value(std::move(val)), hash_cache(hash_key(key)), next(nullptr) {}
     };
 
     using Node = Bucket;
@@ -31,18 +38,24 @@ public:
     const float load_factor_ = 0.7f;              // 负载因子（const 不可修改）
 
     /**
+     * @brief 计算 BigInt 键的哈希（基于十进制文本）
+     * 保证相同 BigInt 键始终映射到相同哈希
+     */
+    static size_t hash_key(const BigInt& key) {
+        return std::hash<std::string>()(key.to_string());
+    }
+
+    /**
      * @brief 从 BigInt 键生成桶索引（基于 BigInt 的字符串哈希）
      * 保证相同 BigInt 键始终映射到相同索引
      */
     [[nodiscard]] size_t getBucketIndex(const BigInt& key) const {
-        std::string key_str = key.to_string();
-        size_t hash = std::hash<std::string>()(key_str);
-        return hash & (buckets_.size() - 1);  // 位运算取模，要求桶大小为 2 的幂
+        return hash_key(key) & (buckets_.size() - 1);  // 位运算取模，要求桶大小为 2 的幂
     }
 
     /**
      * @brief 扩容：桶大小翻倍，重新哈希所有元素
-     * 修复原逻辑中索引计算依赖节点 hash 的耦合问题
+     * 重哈希必须用新桶大小做掩码（swap 之前 buckets_.size() 仍是旧值）
      */
     void resize() {
         const size_t old_size = buckets_.size();
@@ -53,8 +66,8 @@ public:
             std::shared_ptr<Node> current = buckets_[i];
             while (current != nullptr) {
                 std::shared_ptr<Node> next_node = current->next;
-                // 基于当前节点的 BigInt 键重新计算新索引
-                size_t new_idx = getBucketIndex(current->key);
+                // 用新桶大小的掩码重新计算索引，读节点缓存的哈希
+                size_t new_idx = current->hash_cache & (new_size - 1);
                 // 头插法插入新桶
                 current->next = new_buckets[new_idx];
                 new_buckets[new_idx] = current;
@@ -169,12 +182,13 @@ public:
         }
 
         size_t bucket_idx = getBucketIndex(key);
+        size_t key_hash = hash_key(key);
         VT old_val = VT();
 
-        // 检查键是否已存在：存在则更新值
+        // 检查键是否已存在：存在则更新值（先比缓存哈希再比键，省去BigInt比较）
         std::shared_ptr<Node> current = buckets_[bucket_idx];
         while (current != nullptr) {
-            if (current->key == key) {
+            if (current->hash_cache == key_hash and current->key == key) {
                 old_val = std::move(current->value);
                 current->value = std::move(val);
                 return old_val;
@@ -208,16 +222,29 @@ public:
         }
 
         size_t bucket_idx = getBucketIndex(key);
+        size_t key_hash = hash_key(key);
         std::shared_ptr<Node> current = buckets_[bucket_idx];
 
         while (current != nullptr) {
-            if (current->key == key) {
+            if (current->hash_cache == key_hash and current->key == key) {
                 return current;
             }
             current = current->next;
         }
 
         return nullptr;
+    }
+
+    // 直接遍历所有值（不构造中间vector，析构等热路径使用）
+    template<typename Func>
+    void for_each_value(Func&& f) const {
+        for (const auto& bucket_head : buckets_) {
+            auto current = bucket_head;
+            while (current != nullptr) {
+                f(current->value);
+                current = current->next;
+            }
+        }
     }
 
     // ========================= 辅助方法 =========================

@@ -1,0 +1,20 @@
+# 基准：字符串拼接（UTF-8处理与对象分配）
+WARMUP = 2000
+N = 20000
+
+i = 0
+while i < WARMUP
+    s = "x" + Str(i)
+    i = i + 1
+end
+
+start = now()
+acc = ""
+i = 0
+while i < N
+    acc = "prefix-" + Str(i)
+    i = i + 1
+end
+elapsed = now() - start
+print("string_concat", N, "ops:", elapsed, "ns")
+print("per_op_ns:", elapsed / N)

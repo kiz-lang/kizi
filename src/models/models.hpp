@@ -107,6 +107,8 @@ public:
     }
     void del_ref() {
         if (is_important) return;
+        // 引用计数不为正说明存在重复释放，直接暴露而不是静默吞掉
+        assert(refc_ > 0);
         if (refc_ == 0) return;
         refc_ -= 1;
         if (refc_ == 0) {
@@ -117,8 +119,10 @@ public:
 
     void attrs_insert(const std::string& name, Object* o) {
         assert(o != nullptr);
+        // insert返回被覆盖的旧值，插入后释放旧值的引用（一次哈希查找完成）
         o->make_ref();
-        attrs.insert(name, o);
+        auto old_val = attrs.insert(name, o);
+        if (old_val) old_val->del_ref();
     }
 
     [[nodiscard]] virtual std::string debug_string() const {
@@ -128,10 +132,10 @@ public:
     Object () = default;
 
     virtual ~Object() {
-        auto kv_list = attrs.to_vector();
-        for (const auto& obj : kv_list | std::views::values) {
+        // 直接遍历桶释放属性引用，避免to_vector的堆分配
+        attrs.for_each_value([](Object* obj) {
             if (obj) obj->del_ref();
-        }
+        });
     }
 };
 
@@ -167,7 +171,6 @@ public:
     size_t locals_count;
 
     std::vector<ExceptionTable> exception_tables;
-    std::vector<kiz::Instruction> ensure_stmts;
 
     static constexpr ObjectType TYPE = ObjectType::CodeObject;
     [[nodiscard]] ObjectType get_type() const override { return TYPE; }
@@ -178,10 +181,9 @@ public:
         const std::vector<std::string>& f_n,
         const std::vector<UpValue>& u_v,
         const size_t l_c,
-        std::vector<ExceptionTable> et,
-        std::vector<kiz::Instruction> e_s)
+        std::vector<ExceptionTable> et)
             : code(c), var_names(v_n), attr_names(a_n), free_names(f_n), upvalues(u_v), locals_count(l_c),
-                 exception_tables(std::move(et)), ensure_stmts(std::move(e_s)) {}
+                 exception_tables(std::move(et)) {}
 
     [[nodiscard]] std::string debug_string() const override {
         return "<CodeObject at " + ptr_to_string(this) + ">";
@@ -210,7 +212,8 @@ public:
     }
 
     ~Module() override {
-        code->del_ref();
+        // 标准库模块不携带code，析构时需判空
+        if (code) code->del_ref();
     }
 };
 
@@ -358,7 +361,9 @@ public:
     [[nodiscard]] ObjectType get_type() const override { return TYPE; }
 
     explicit Dictionary(dep::Dict<std::pair<Object*, Object*>> val_) : val(std::move(val_)) {
-        for (auto& kv_pair : val_.to_vector() | std::views::values) {
+        // 移动完成后遍历自身存储，为每个键值对补上字典持有的引用
+        auto kv_list = val.to_vector();
+        for (auto& kv_pair : kv_list | std::views::values) {
             if (kv_pair.first) kv_pair.first->make_ref();
             if (kv_pair.second) kv_pair.second->make_ref();
         }
@@ -388,11 +393,11 @@ public:
     }
 
     ~Dictionary() override {
-        auto kv_list = val.to_vector();
-        for (auto& kv_pair : kv_list | std::views::values) {
+        // 直接遍历桶释放键值引用，避免to_vector的堆分配
+        val.for_each_value([](std::pair<Object*, Object*>& kv_pair) {
             if (kv_pair.first) kv_pair.first->del_ref();
             if (kv_pair.second) kv_pair.second->del_ref();
-        }
+        });
     }
 };
 
@@ -447,6 +452,7 @@ class FileHandle : public Object {
 public:
     std::fstream* file_handle = nullptr;
     bool is_closed = false;
+    size_t readline_cursor = 0; // readline顺序读的游标（已读到的行号）
     explicit FileHandle() {
         attrs_insert("__parent__", based_file_handle);
     }
@@ -545,6 +551,8 @@ inline auto cast_to_list(Object* o) {
 }
 
 inline auto copy_if_mutable(Object* obj) -> Object* {
+    // 统一返回“借用指针”：不可变对象原样返回（引用计数不变），可变对象返回全新拷贝(refc=0)
+    // 持有责任由调用方的存储点自行make_ref承担
     switch (obj->get_type()) {
 
     case Object::ObjectType::List: {
@@ -572,7 +580,6 @@ inline auto copy_if_mutable(Object* obj) -> Object* {
     }
 
     default: {
-        obj->make_ref();
         return obj;
     }
 

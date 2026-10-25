@@ -1,0 +1,20 @@
+# 基准：整数四则与取模（触发BigInt运算与int_add等原生调用）
+WARMUP = 10000
+N = 200000
+
+i = 0
+while i < WARMUP
+    i = i + 1
+end
+
+start = now()
+acc = 0
+i = 0
+while i < N
+    acc = acc + i * 3 - 1
+    acc = acc % 1000003
+    i = i + 1
+end
+elapsed = now() - start
+print("int_arith", N, "iters:", elapsed, "ns")
+print("per_iter_ns:", elapsed / N)

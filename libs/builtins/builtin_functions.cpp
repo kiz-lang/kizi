@@ -1,3 +1,9 @@
+/**
+ * @file builtin_functions.cpp
+ * @brief 全局内置函数实现（print/input/range/open/sleep等）
+ * @author azhz1107cat
+ * @date 2026-10-25
+ */
 #include "include/builtin_functions.hpp"
 
 #include <chrono>
@@ -25,7 +31,10 @@ model::Object* input(model::Object* self, const model::List* args) {
         std::cout << model::cast_to_str(prompt_obj)->val;
     }
     std::string result;
-    std::getline(std::cin, result);
+    if (!std::getline(std::cin, result)) {
+        // EOF后必须显式报错，否则交互脚本会静默拿到无数个空串
+        throw NativeFuncError("EOFError", "input(): reached end of input");
+    }
     return new model::String(result);
 }
 
@@ -55,6 +64,8 @@ Built-in Functions:
     cmd(command)
     now()
     type_of(obj)
+    type(obj)
+    len(list_or_str_or_dict)
     setattr(obj, attr_name, value)
     getattr(current_only=False, obj, attr_name, default_value)
     hasattr(current_only=False, obj, attr_name)
@@ -93,7 +104,8 @@ model::Object* breakpoint(model::Object* self, const model::List* args) {
         std::cout << "Locals: " << "\n";
         for (const auto& n : frame->code_object->var_names) {
             auto l = kiz::Vm::op_stack[frame->bp + j - 1];
-            std::cout << n << " = " << kiz::Vm::obj_to_debug_str(l);
+            // 未赋值的局部槽位跳过而不是对nullptr解引用
+            std::cout << n << " = " << (l ? kiz::Vm::obj_to_debug_str(l) : std::string("<unassigned>"));
             if (j<frame->code_object->var_names.size()) std::cout << ", ";
             ++j;
         }
@@ -160,12 +172,16 @@ model::Object* cmd(model::Object* self, const model::List* args) {
 }
 
 model::Object* now(model::Object* self, const model::List* args) {
+    // 用系统墙钟：high_resolution_clock不保证是墙钟时间
     auto now =
-        std::chrono::high_resolution_clock::now()
+        std::chrono::system_clock::now()
         .time_since_epoch();
     int64_t time = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
     return new model::Int( dep::BigInt(std::to_string(time)) );
 }
+
+// 单次容器物化的元素上限：防range/repeat等一行脚本耗尽内存
+constexpr unsigned long long max_materialize_count = 10000000;
 
 model::Object* range(model::Object* self, const model::List* args) {
     auto arg_vector = args->val;
@@ -202,9 +218,23 @@ model::Object* range(model::Object* self, const model::List* args) {
         end_int = end_int_obj->val;
     } else kiz::Vm::assert_argc({1,2,3}, args);
 
-    for (dep::BigInt i = start_int; i < end_int; i+=step_int) {
-        auto i_obj = new model::Int(i);
-        range_vector.emplace_back(i_obj);
+    // 步长为0是死循环，必须显式报错
+    if (step_int == dep::BigInt(0))
+        throw NativeFuncError("CalculateError", "range(): step must not be zero");
+
+    // 按步长方向决定迭代条件，负步长向下计数
+    if (step_int > dep::BigInt(0)) {
+        for (dep::BigInt i = start_int; i < end_int; i+=step_int) {
+            if (range_vector.size() >= max_materialize_count)
+                throw NativeFuncError("CalculateError", "range(): too many elements");
+            range_vector.emplace_back(new model::Int(i));
+        }
+    } else {
+        for (dep::BigInt i = start_int; i > end_int; i+=step_int) {
+            if (range_vector.size() >= max_materialize_count)
+                throw NativeFuncError("CalculateError", "range(): too many elements");
+            range_vector.emplace_back(new model::Int(i));
+        }
     }
     return new model::List(range_vector);
 }
@@ -215,6 +245,10 @@ model::Object* setattr(model::Object* self, const model::List* args) {
     auto for_set = arg_vector[0];
     auto attr_name = arg_vector[1];
     auto value = arg_vector[2];
+    // 与SET_ATTR指令保持同一防线：禁止篡改内建类型对象
+    if (std::ranges::find(kiz::Vm::builtins, for_set) != std::ranges::end(kiz::Vm::builtins)) {
+        throw NativeFuncError("SetattrError", "Cannot reset or add attribute for builtin object");
+    }
     for_set->attrs_insert(model::cast_to_str(attr_name)->val, value);
     return model::load_nil();
 }
@@ -264,6 +298,10 @@ model::Object* delattr(model::Object* self, const model::List* args) {
 
     model::Object* obj = arg_vector[0];
     model::Object* attr_name = arg_vector[1];
+    // 先取出属性值释放对象对它的持有，再从表中删除
+    if (const auto value_it = obj->attrs.find(model::cast_to_str(attr_name)->val)) {
+        if (value_it->value) value_it->value->del_ref();
+    }
     obj->attrs.del(model::cast_to_str(attr_name)->val);
     return model::load_nil();
 }
@@ -312,7 +350,7 @@ model::Object* create(model::Object* self, const model::List* args) {
     if (args->val.empty()) {
         auto o = new model::Object();
 
-        o->attrs_insert("__parent__", model::based_obj);
+        o->attrs_insert(model::magic_name::parent, model::based_obj);
 
         return o;
     }
@@ -322,7 +360,7 @@ model::Object* create(model::Object* self, const model::List* args) {
     }
     const auto new_obj = new model::Object();
 
-    new_obj->attrs_insert("__parent__", obj);
+    new_obj->attrs_insert(model::magic_name::parent, obj);
 
     return new_obj;
 }
@@ -359,8 +397,8 @@ model::Object* attr(model::Object* self, const model::List* args) {
     auto obj = get_one_arg(args);
     std::vector<std::pair<dep::BigInt, std::pair<model::Object*, model::Object*>>> elem_list;
     for (auto& [name, obj]: obj->attrs.to_vector()) {
-        obj->make_ref();
-        elem_list.emplace_back(dep::hash_string(name),
+        // 哈希必须与Str.__hash__同构（带类型前缀），否则attr()产出的字典按键查不到
+        elem_list.emplace_back(dep::hash_string("Str:" + name),
             std::pair {new model::String(name), obj}
         );
     }
@@ -369,6 +407,10 @@ model::Object* attr(model::Object* self, const model::List* args) {
 
 model::Object* sleep(model::Object* self, const model::List* args) {
     auto time = model::cast_to_int(get_one_arg(args)) ->val.to_unsigned_long_long();
+    // 上限一年，防永久挂死
+    constexpr unsigned long long max_sleep_ms = 365ULL * 24 * 3600 * 1000;
+    if (time > max_sleep_ms)
+        throw NativeFuncError("CalculateError", "sleep(): duration too long");
     std::this_thread::sleep_for(std::chrono::milliseconds(time));
     return model::load_nil();
 }
@@ -377,6 +419,11 @@ model::Object* open(model::Object* self, const model::List* args) {
     kiz::Vm::assert_argc(2, args);
     auto path = cast_to_str(args->val[0])->val;
     auto mode = cast_to_str(args->val[1])->val;
+
+    // 路径内嵌NUL字节会被底层c_str截断，必须显式拒绝
+    if (path.find('\0') != std::string::npos) {
+        throw NativeFuncError("PathError", "Path must not contain NUL character");
+    }
 
     auto real_path = std::filesystem::absolute(kiz::Vm::get_current_file_path().parent_path() / path);
 
@@ -398,6 +445,8 @@ model::Object* open(model::Object* self, const model::List* args) {
         }
     } else if (mode == "w+") {
         open_mode = std::ios_base::in | std::ios_base::out | std::ios_base::trunc;
+    } else if (mode == "a+") {
+        open_mode = std::ios_base::in | std::ios_base::out | std::ios_base::app;
     } else {
         throw NativeFuncError("ModeError", "Invalid file mode: " + mode);
     }
@@ -439,6 +488,7 @@ model::Object* assert_(model::Object* self, const model::List* args) {
 }
 
 model::Object* panic(model::Object* self, const model::List* args) {
+    kiz::Vm::assert_argc(1, args); // 空参时args->val[0]是越界读
     std::string msg = model::cast_to_str(args->val[0]) ->val;
     std::cout << Color::BRIGHT_RED << "A Panic! : " << Color::RESET << msg << std::endl;
     exit(3);
@@ -449,6 +499,13 @@ model::Object* repeat(model::Object* self, const model::List* args) {
     auto lst = cast_to_list(args->val[0])->val;
     auto repeat_count = cast_to_int(args->val[1])->val;
 
+    // 结果元素数上限校验：防一行脚本物化出巨型列表耗尽内存
+    if (repeat_count > dep::BigInt(0) and !lst.empty()) {
+        dep::BigInt total = repeat_count * dep::BigInt(lst.size());
+        if (total > dep::BigInt(max_materialize_count))
+            throw NativeFuncError("CalculateError", "repeat(): too many elements");
+    }
+
     std::vector<model::Object*> new_vec = {};
 
     for (dep::BigInt i = 0; i < repeat_count; i += 1) {
@@ -458,6 +515,21 @@ model::Object* repeat(model::Object* self, const model::List* args) {
     }
 
     return new model::List(new_vec);
+}
+
+model::Object* len(model::Object* self, const model::List* args) {
+    const auto obj = get_one_arg(args);
+    switch (obj->get_type()) {
+        case model::Object::ObjectType::List:
+            return new model::Int(dep::BigInt(dynamic_cast<model::List*>(obj)->val.size()));
+        case model::Object::ObjectType::String:
+            // 按UTF-8码点计数，与"abc".len()语义一致
+            return new model::Int(dep::BigInt(dep::UTF8String(dynamic_cast<model::String*>(obj)->val).size()));
+        case model::Object::ObjectType::Dictionary:
+            return new model::Int(dep::BigInt(dynamic_cast<model::Dictionary*>(obj)->val.to_vector().size()));
+        default:
+            throw NativeFuncError("TypeError", "len(): argument must be List, Str or Dict");
+    }
 }
 
 }

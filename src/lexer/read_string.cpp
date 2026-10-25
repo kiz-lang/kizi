@@ -75,6 +75,7 @@ void Lexer::read_fstring() {
                start_lno, start_col, lineno_, col_ - 1);
 
     bool in_expr = false;
+    bool fstring_closed = false; // 外层引号是否闭合
     size_t expr_start_char = 0;
     size_t expr_start_lno = 0;
     size_t expr_start_col = 0;
@@ -121,18 +122,11 @@ void Lexer::read_fstring() {
             emit_token(TokenType::FStringEnd, end_char, end_char + 1,
                        lineno_, col_, lineno_, col_);
             next(); // 消费结束引号
+            fstring_closed = true;
             break;
         }
 
-        // 处理转义字符（仅在表达式外部且不在字符串中）
-        if (c == '\\' && char_pos_ + 1 < src_.size() && !in_expr) {
-            // 直接跳过转义序列，不生成token
-            next(); // 跳过反斜杠
-            if (char_pos_ < src_.size()) {
-                next(); // 跳过转义字符
-            }
-            continue;
-        }
+        // 表达式内部的转义符由字符串状态机自行处理，这里无需干预
 
         // 检查是否进入表达式
         if (c == '{' && !in_expr) {
@@ -205,29 +199,42 @@ void Lexer::read_fstring() {
             size_t str_start_lno = lineno_;
             size_t str_start_col = col_;
 
-            // 收集直到下一个 '{' 或引号或转义符
+            // 收集直到下一个 '{' 或引号；转义序列成对纳入原文，稍后统一解释
             while (char_pos_ < src_.size()) {
                 dep::UTF8Char ch = src_[char_pos_];
-                if (ch == quote_char || ch == '{' || ch == '\\') {
+                if (ch == quote_char || ch == '{') {
                     break;
+                }
+                if (ch == '\\') {
+                    next(); // 反斜杠
+                    if (char_pos_ < src_.size()) {
+                        next(); // 转义字符原样保留
+                    }
+                    continue;
                 }
                 next();
             }
 
-            // 如果有字符串内容，生成 String token
+            // 如果有字符串内容，生成 String token（转义序列在此解释）
             if (char_pos_ > str_start) {
                 std::string str_text;
                 for (size_t i = str_start; i < char_pos_; i++) {
                     str_text += src_[i].to_string();
                 }
 
-                emit_token(TokenType::String, str_start, char_pos_,
-                           str_start_lno, str_start_col, lineno_, col_ - 1);
+                tokens_.emplace_back(TokenType::String, handle_escape(str_text),
+                    str_start_lno, lineno_, str_start_col, col_ - 1);
             }
         } else {
             // 在表达式中（不在字符串中），继续读取
             next();
         }
+    }
+
+    // 到达EOF仍未闭合f-string本体：与普通字符串一样在词法层给出明确报错
+    if (!fstring_closed) {
+        err::error_reporter(file_path_, {start_lno, prev_lineno_, start_col, prev_col_},
+                          "SyntaxError", "Unclosed f-string literal");
     }
 
     // 检查未闭合的表达式

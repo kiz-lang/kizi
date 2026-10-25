@@ -1,0 +1,4 @@
+import helpers at "math_helpers.kiz"
+print(helpers.E)
+print("私有名通过属性表不可见:")
+print(attr(helpers).contains("E"))

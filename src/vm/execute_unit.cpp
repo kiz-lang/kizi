@@ -1,3 +1,9 @@
+/**
+ * @file execute_unit.cpp
+ * @brief VM核心执行单元（指令分发）
+ * @author azhz1107cat
+ * @date 2026-10-25
+ */
 #include "vm.hpp"
 #include "../../libs/builtins/include/builtin_functions.hpp"
 #include "../opcode/opcode.hpp"
@@ -164,7 +170,9 @@ void Vm::execute_unit(const Instruction& instruction) {
 
     case Opcode::OP_UNPACK: {
         auto obj = simple_get_and_pop_stack_top();
-        push_to_stack(new model::Unpack(obj));
+        auto unpack_obj = new model::Unpack(obj); // 构造内部已make_ref
+        obj->del_ref(); // 归还从操作数栈移交来的引用
+        push_to_stack(unpack_obj);
         break;
     }
 
@@ -180,20 +188,31 @@ void Vm::execute_unit(const Instruction& instruction) {
 
     case Opcode::CREATE_CLOSURE: {
         auto func_obj = dynamic_cast<model::Function*>(op_stack.back());
+        assert(func_obj != nullptr);
 
         auto& upvalues = func_obj->code->upvalues;
-        std::vector<model::Object*> free_vars {};
 
+        // 克隆出独立的Function对象持有本次捕获：同一函数定义在循环中
+        // 创建的多个闭包各自持有自己的free_vars，互不覆盖
+        auto closure = new model::Function(func_obj->name, func_obj->code, func_obj->argc);
+        closure->has_rest_params = func_obj->has_rest_params;
+
+        std::vector<model::Object*> free_vars {};
         for (const auto& [distance_from_curr, idx] : upvalues) {
             auto frame = call_stack[ call_stack.size() - distance_from_curr];
             size_t loc_based = frame->bp;
 
             auto var = op_stack[loc_based + idx];
-            var->make_ref();
-            free_vars.push_back( var );
+            // 自引用捕获（递归闭包）：捕获克隆自身而不是未捕获的原函数
+            auto captured = (var == func_obj) ? static_cast<model::Object*>(closure) : var;
+            captured->make_ref();
+            free_vars.push_back(captured);
         }
+        closure->free_vars = std::move(free_vars);
 
-        func_obj->free_vars = free_vars;
+        op_stack.back()->del_ref(); // 释放const池共享函数对象在栈上的引用
+        closure->make_ref();        // 闭包对象接替其栈槽位持有
+        op_stack.back() = closure;
         break;
     }
 
@@ -207,24 +226,34 @@ void Vm::execute_unit(const Instruction& instruction) {
     }
 
     case Opcode::RET: {
-        // 执行ensure确保资源被释放
-        handle_ensure();
-
         auto frame = call_stack.back();
         call_stack.pop_back();
+
+        // 模块顶层return：调用栈已空，直接结束执行（此前对空栈取back()是UB崩溃）
+        if (call_stack.empty()) {
+            auto return_val = get_and_pop_stack_top();
+            unwind_op_stack_to(frame->bp);
+            push_to_stack(return_val.get());
+            destroy_frame(frame);
+            running = false;
+            break;
+        }
+
         call_stack.back()->bp = frame->last_bp;
         call_stack.back()->pc = frame->return_to_pc;
 
         auto return_val = get_and_pop_stack_top();
         assert(return_val.get());
 
+        // 清空该帧局部区与残留临时值（槽位可能为nullptr，需判空）
         while (frame->bp < op_stack.size()) {
-            op_stack.back()->del_ref();
+            if (op_stack.back()) op_stack.back()->del_ref();
             op_stack.pop_back();
         }
 
         push_to_stack(return_val.get());
 
+        if (frame->curr_error) frame->curr_error->del_ref();
         frame->owner->del_ref();
         frame->code_object->del_ref();
         for (auto it: frame->iters) {
@@ -245,7 +274,7 @@ void Vm::execute_unit(const Instruction& instruction) {
 
         auto func_obj = get_attr(obj.get(), attr_name);
 
-        func_obj->make_ref();
+        // get_attr返回借用指针，handle_call内部会自行持有引用
         handle_call(func_obj, args_obj.get(), obj.get());
         break;
     }
@@ -268,11 +297,9 @@ void Vm::execute_unit(const Instruction& instruction) {
             throw NativeFuncError("SetattrError", "Cannot reset or add attribute for builtin object");
         }
 
+        // copy_if_mutable返回借用指针(可变值为新拷贝)，attrs_insert内部统一持有新值并释放旧值
         auto new_val = model::copy_if_mutable(attr_val.get());
-        auto old_it = obj.get()->attrs.find(attr_name);   // 获取旧值（若有）
-        obj.get()->attrs_insert(attr_name, new_val);      // 插入新值，内部 make_ref
-
-        if (old_it) old_it->value->del_ref();       // 释放旧值
+        obj.get()->attrs_insert(attr_name, new_val);
         break;
     }
 
@@ -298,6 +325,12 @@ void Vm::execute_unit(const Instruction& instruction) {
 
     case Opcode::LOAD_VAR: {
         auto val = op_stack[call_stack.back()->bp + instruction.opn];
+        // 声明过但尚未赋值的槽位：给出带变量名的可读错误而非晦涩的VM内部错误
+        if (!val) {
+            const auto& var_names = call_stack.back()->code_object->var_names;
+            std::string name = instruction.opn < var_names.size() ? var_names[instruction.opn] : "<unknown>";
+            throw NativeFuncError("NameError", "Variable '" + name + "' used before assignment");
+        }
         push_to_stack(val);
         break;
     }
@@ -368,8 +401,12 @@ void Vm::execute_unit(const Instruction& instruction) {
 
         op_stack[loc_based + upvalue.idx] = new_val;
 
-        // 更新闭包
+        // 更新闭包捕获：释放旧值并持有新值
         if (auto f = dynamic_cast<model::Function*>(call_stack.back()->owner)) {
+            if (f->free_vars[idx_of_upvalue]) {
+                f->free_vars[idx_of_upvalue]->del_ref();
+            }
+            new_val->make_ref();
             f->free_vars[idx_of_upvalue] = new_val;
         }
         break;
@@ -389,7 +426,7 @@ void Vm::execute_unit(const Instruction& instruction) {
         if (!call_stack.back()->curr_error) {
             throw KizStopRunningSignal("Unable to load error");
         }
-        call_stack.back()->curr_error->make_ref();
+        // push_to_stack内部会make_ref，curr_error自身持有的引用不变
         push_to_stack(call_stack.back()->curr_error);
         break;
     }
@@ -420,7 +457,7 @@ void Vm::execute_unit(const Instruction& instruction) {
 
     case Opcode::CREATE_OBJECT: {
         auto obj = new model::Object();
-        obj->attrs_insert("__parent__", model::based_obj);
+        obj->attrs_insert(model::magic_name::parent, model::based_obj);
         push_to_stack(obj);
         break;
     }

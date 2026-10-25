@@ -31,6 +31,7 @@ std::vector<CallFrame*> Vm::call_stack {};
 model::Int* Vm::small_int_pool[201] {};
 bool Vm::running = false;
 std::string Vm::main_file_path;
+thread_local bool Vm::native_return_owns = false;
 std::vector<model::Object*> Vm::const_pool {};
 dep::HashMap<model::Object*> Vm::std_modules {};
 
@@ -96,8 +97,7 @@ void Vm::set_main_module(model::Module* src_module) {
 
         .iters{},
 
-        .curr_error = nullptr,
-        .exec_ensure_stmt = false
+        .curr_error = nullptr
     };
 
     // 将调用帧压入VM的调用栈
@@ -105,9 +105,6 @@ void Vm::set_main_module(model::Module* src_module) {
 
     // 初始化VM执行状态：标记为"就绪"
     running = true; // 标记VM为运行状态（等待exec触发执行）
-    // exec_curr_code();
-    // // 执行ensure确保资源被释放
-    // handle_ensure();
 }
 
 void Vm::exec_curr_code() {
@@ -116,11 +113,13 @@ void Vm::exec_curr_code() {
         auto curr_frame = call_stack.back();
         // 检查当前帧是否执行完毕
         if (curr_frame->pc >= curr_frame->code_object->code.size()) {
-            // 非模块帧则弹出，模块帧则退出循环
+            // 非模块帧则按RET语义清理并弹出，模块帧则退出循环
             if (call_stack.size() == 1) {
                 break;
             }
-            call_stack.pop_back();;
+            call_stack.pop_back();
+            unwind_op_stack_to(curr_frame->bp);
+            destroy_frame(curr_frame);
             continue;
         }
 
@@ -153,8 +152,30 @@ void Vm::exec_curr_code() {
         } catch (NativeFuncError& e) {
             forward_to_handle_throw(e.name, e.msg);
             continue;
+        } catch (KizUnwindSignal&) {
+            // 异常已重定向到本循环管理的帧的catch块，pc已就位，直接继续执行
+            continue;
         }
         ADVANCE_PC
+    }
+}
+
+void Vm::destroy_frame(CallFrame* frame) {
+    // 调用前必须保证操作数栈已截断到frame->bp以下
+    if (frame->curr_error) frame->curr_error->del_ref();
+    frame->owner->del_ref();
+    frame->code_object->del_ref();
+    for (auto it : frame->iters) {
+        if (it) it->del_ref();
+    }
+    delete frame;
+}
+
+void Vm::unwind_op_stack_to(size_t target_size) {
+    // 局部槽位可能为nullptr，需判空后释放
+    while (op_stack.size() > target_size) {
+        if (op_stack.back()) op_stack.back()->del_ref();
+        op_stack.pop_back();
     }
 }
 
@@ -195,7 +216,7 @@ void Vm::reset_global_code(model::CodeObject* code_object) {
 
     // 获取全局模块级调用帧（REPL 共享同一个帧）
     auto frame = call_stack.back();
-    // 对原有CodeObject调用del_ref(), 释放CallFrame的持有权
+    // 对原有CodeObject调用del_ref()，释放CallFrame的持有权
     if (frame->code_object) {
         frame->code_object->del_ref();
     }
@@ -203,6 +224,13 @@ void Vm::reset_global_code(model::CodeObject* code_object) {
     code_object->make_ref();
     frame->code_object = code_object;
     frame->pc = 0;
+
+    // 同步操作数栈局部区大小：截断旧值(释放引用)或补空槽，避免新代码局部下标越界
+    if (op_stack.size() > code_object->locals_count) {
+        unwind_op_stack_to(code_object->locals_count);
+    } else {
+        op_stack.resize(code_object->locals_count, nullptr);
+    }
     exec_curr_code();
 }
 
@@ -217,7 +245,7 @@ void Vm::assert_argc(size_t argc, const model::List* args) {
         return;
     }
     throw NativeFuncError("ArgCountError", std::format(
-        "expect {} arguments but got {} arguments", args->val.size(), argc
+        "expect {} arguments but got {} arguments", argc, args->val.size()
     ));
 }
 
@@ -247,10 +275,12 @@ void Vm::assert_argc(const std::vector<size_t>& argcs, const model::List* args) 
 std::filesystem::path Vm::get_current_file_path() {
     std::filesystem::path current_file_path = "";
     if (main_file_path == "<shell#>") return current_file_path;
+    // 取调用栈中最顶部（最近执行）的模块帧，嵌套import时相对路径以当前模块目录为基准
     for (const auto& frame: std::ranges::reverse_view(call_stack)) {
         if (frame->owner->get_type() == model::Object::ObjectType::Module) {
             const auto m = dynamic_cast<model::Module*>(frame->owner);
             current_file_path = m->path;
+            break;
         }
     }
     return current_file_path;

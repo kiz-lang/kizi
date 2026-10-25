@@ -1,0 +1,15 @@
+Animal = create()
+Animal.speak = fn(this)
+    return "..."
+end
+Animal.name = "generic"
+
+Dog = create(Animal)
+Dog.name = "dog"
+Dog.speak = fn(this)
+    return "woof"
+end
+
+d = create(Dog)
+print(d.name, d.speak())
+print(ischild(d, Animal))

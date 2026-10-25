@@ -1,0 +1,12 @@
+i = 0
+while i < 5
+    i = i + 1
+    try
+        if i == 3
+            throw Error("Skip", "跳过3")
+        end
+        print("处理", i)
+    catch e (Skip)
+        print("跳过一轮")
+    end
+end

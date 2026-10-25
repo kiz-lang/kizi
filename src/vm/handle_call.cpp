@@ -1,3 +1,9 @@
+/**
+ * @file handle_call.cpp
+ * @brief 函数调用/方法调用/真值判断/对象转字符串处理
+ * @author azhz1107cat
+ * @date 2026-10-25
+ */
 #include <utility>
 
 #include "vm.hpp"
@@ -7,6 +13,34 @@
 
 namespace kiz {
 
+// 带已访问集合的属性查找：防止__parent__成环导致无限递归栈溢出
+static model::Object* get_attr_with_visited(model::Object* obj, const std::string& attr_name,
+                                             std::unordered_set<const model::Object*>& visited) {
+    assert(obj != nullptr);
+    if (visited.count(obj)) {
+        throw NativeFuncError("NameError",
+            "Cyclic __parent__ chain detected while looking up attribute '" + attr_name + "'");
+    }
+    visited.insert(obj);
+
+    const auto attr_it = obj->attrs.find(attr_name);
+    if (attr_it) {
+        return attr_it->value;
+    }
+    auto parent_it = obj->attrs.find("__parent__");
+    if (parent_it) {
+        return get_attr_with_visited(parent_it->value, attr_name, visited);
+    }
+    throw NativeFuncError("NameError",
+        "Undefined attribute '" + attr_name + "'"
+    );
+}
+
+model::Object* Vm::get_attr(model::Object* obj, const std::string& attr_name) {
+    std::unordered_set<const model::Object*> visited;
+    return get_attr_with_visited(obj, attr_name, visited);
+}
+
 bool Vm::is_true(model::Object* obj) {
     if (const auto bool_obj = dynamic_cast<const model::Bool*>(obj)) {
         return bool_obj->val==true;
@@ -15,28 +49,24 @@ bool Vm::is_true(model::Object* obj) {
         return false;
     }
 
+    // 自定义__bool__互相返回对方会无限递归，深度封顶后报错
+    static thread_local int bool_depth = 0;
+    struct DepthGuard {
+        int& d;
+        explicit DepthGuard(int& depth) : d(depth) {
+            ++d;
+            if (d > 128) {
+                throw NativeFuncError("TypeError", "__bool__ recursion too deep (possible cyclic __bool__)");
+            }
+        }
+        ~DepthGuard() { --d; }
+    } depth_guard(bool_depth);
+
     call_method(obj, "__bool__", {});
-    auto result = simple_get_and_pop_stack_top();
-    bool ret = is_true(result);
+    auto result = get_and_pop_stack_top(); // RAII释放结果引用
+    bool ret = is_true(result.get());
 
     return ret;
-}
-
-model::Object* Vm::get_attr(model::Object* obj, const std::string& attr_name) {
-    assert(obj != nullptr);
-    const auto attr_it = obj->attrs.find(attr_name);
-    auto parent_it = obj->attrs.find("__parent__");
-    if (attr_it) {
-        return attr_it->value;
-    }
-
-    if (parent_it) {
-        return get_attr(parent_it->value, attr_name);
-    }
-
-    throw NativeFuncError("NameError",
-        "Undefined attribute '" + attr_name + "'"
-    );
 }
 
 model::Object* Vm::get_attr_current(model::Object* obj, const std::string& attr) {
@@ -60,6 +90,8 @@ void Vm::handle_call(model::Object* func_obj, model::Object* args_obj, model::Ob
     // 分类型处理函数调用（Function / NativeFunction）
     if (const auto cpp_func = dynamic_cast<model::NativeFunction*>(func_obj)) {
         // -------------------------- 处理 NativeFunction 调用 --------------------------
+        // 每次分派先复位所有权标志，防止上一次异常路径遗留的置位误伤本次
+        native_return_owns = false;
         model::Object* return_val = cpp_func->func(self, args_list);
 
         // 管理返回值引用计数：返回值压栈前必须 make_ref
@@ -68,8 +100,13 @@ void Vm::handle_call(model::Object* func_obj, model::Object* args_obj, model::Ob
             return_val = model::unique_nil;
         }
 
-        // 返回值压入操作数栈
-        push_to_stack(return_val);
+        // 返回值压入操作数栈；"移除并返回"的原生函数已把引用移交回来，不再额外+1
+        if (native_return_owns) {
+            native_return_owns = false;
+            op_stack.push_back(return_val);
+        } else {
+            push_to_stack(return_val);
+        }
     } else if (auto func = dynamic_cast<model::Function*>(func_obj)) {
         // -------------------------- 处理 Function 调用 --------------------------
         DEBUG_OUTPUT("call Function: " + func->name);
@@ -85,6 +122,11 @@ void Vm::handle_call(model::Object* func_obj, model::Object* args_obj, model::Ob
         if (actual_argc != required_argc and !func->has_rest_params)
             throw NativeFuncError("ArgCountError", std::format(
                 "expect {} arguments but got {} arguments", required_argc, actual_argc
+            ));
+        // 可变参数函数：除末尾rest参数外，其余必要参数必须给足
+        if (func->has_rest_params and actual_argc < required_argc - 1)
+            throw NativeFuncError("ArgCountError", std::format(
+                "expect at least {} arguments but got {} arguments", required_argc - 1, actual_argc
             ));
 
         // 创建新调用帧
@@ -103,8 +145,7 @@ void Vm::handle_call(model::Object* func_obj, model::Object* args_obj, model::Ob
 
             .iters{},
 
-            .curr_error = nullptr,
-            .exec_ensure_stmt = false
+            .curr_error = nullptr
         };
         op_stack.resize(op_stack.size() + func->code->locals_count);
 
@@ -119,6 +160,10 @@ void Vm::handle_call(model::Object* func_obj, model::Object* args_obj, model::Ob
                 std::string param_name = new_frame->code_object->var_names[i];
                 model::Object* param_val;
                 if (i == required_argc - 1 ) {
+                    // 释放被丢弃前缀元素在参数List中的引用（其值已各自拷入局部区）
+                    for (size_t j = 0; j < i; ++j) {
+                        if (args_list->val[j]) args_list->val[j]->del_ref();
+                    }
                     args_list->val.assign(args_list->val.begin() + i, args_list->val.end());
                     param_val = args_list;
                 }
@@ -167,9 +212,16 @@ void Vm::handle_call(model::Object* func_obj, model::Object* args_obj, model::Ob
 void Vm::call_function(model::Object* func_obj, std::vector<model::Object*> args, model::Object* self) {
     size_t old_call_stack_size = call_stack.size();
 
+    // List构造持有每个参数的引用；temp_args自身+1后移交handle_call使用
     auto temp_args = new model::List(std::move(args));
     temp_args->make_ref();
-    handle_call(func_obj, temp_args, self);
+    try {
+        handle_call(func_obj, temp_args, self);
+    } catch (...) {
+        // 参数校验失败等场景下释放参数列表后继续抛出
+        temp_args->del_ref();
+        throw;
+    }
     temp_args->del_ref();
 
     if (old_call_stack_size == call_stack.size()) return;
@@ -178,25 +230,56 @@ void Vm::call_function(model::Object* func_obj, std::vector<model::Object*> args
         auto curr_frame = call_stack.back();
         auto& frame_code = curr_frame->code_object;
 
-        // 检查是否执行到模块代码末尾：执行完毕则出栈
+        // 检查是否执行到代码末尾：按RET语义清理并销毁帧
         if (curr_frame->pc >= frame_code->code.size()) {
             call_stack.pop_back();
+            if (!call_stack.empty()) {
+                call_stack.back()->bp = curr_frame->last_bp;
+                call_stack.back()->pc = curr_frame->return_to_pc;
+            }
+            unwind_op_stack_to(curr_frame->bp);
+            destroy_frame(curr_frame);
             continue;
         }
 
         // 执行当前指令
         const Instruction& curr_inst = frame_code->code[curr_frame->pc];
         try {
+            // RET由本函数代为处理：按RET语义完整清理帧，但不回写调用者pc
+            // （调用者的pc推进交还给外层执行循环的ADVANCE_PC，避免跳过一条指令）
             if (curr_inst.opc == Opcode::RET and old_call_stack_size == call_stack.size() - 1) {
                 assert(!call_stack.empty());
+                auto frame = call_stack.back();
                 call_stack.pop_back();
+
+                auto return_val = get_and_pop_stack_top();
+                unwind_op_stack_to(frame->bp);
+                push_to_stack(return_val.get());
+
+                if (frame->curr_error) frame->curr_error->del_ref();
+                frame->owner->del_ref();
+                frame->code_object->del_ref();
+                for (auto it: frame->iters) {
+                    if (it) it->del_ref();
+                }
+                delete frame;
                 return;
             }
             execute_unit(curr_inst); // 调用VM的指令执行核心方法
         } catch (const NativeFuncError& e) {
             // 原生函数执行错误，抛出异常
             forward_to_handle_throw(e.name, e.msg);
-            continue;
+            // 本函数管理的帧在解栈中被销毁（帧数跌破进入时的基线）：处理点在更外层
+            if (call_stack.size() <= old_call_stack_size) {
+                throw KizUnwindSignal();
+            }
+            continue; // pc已被重定向到handler起点，不再推进
+        }
+
+        // THROW等指令在C++层不抛异常即可完成解栈跳转：
+        // 帧数跌破基线说明本函数管理的帧已被销毁，处理点在别的执行循环，用信号穿透C++栈
+        if (call_stack.size() <= old_call_stack_size) {
+            throw KizUnwindSignal();
         }
 
         ADVANCE_PC
@@ -206,32 +289,9 @@ void Vm::call_function(model::Object* func_obj, std::vector<model::Object*> args
 
 void Vm::call_method(model::Object* obj, const std::string& attr_name, std::vector<model::Object*> args) {
     assert(obj != nullptr);
-    auto parent_it = obj->attrs.find("__parent__");
-    static const std::unordered_set<std::string_view> magic_methods = {
-    std::string_view("__add__"), std::string_view("__sub__"),
-    std::string_view("__mul__"), std::string_view("__div__"),
-    std::string_view("__pow__"), std::string_view("__mod__"),
-    std::string_view("__neg__"), std::string_view("__eq__"),
-    std::string_view("__gt__"), std::string_view("__lt__"),
-    std::string_view("__str__"), std::string_view("__dstr__"),
-    std::string_view("__bool__"), std::string_view("__getitem__"),
-    std::string_view("__setitem__"), std::string_view("contains"),
-    std::string_view("__next__"), std::string_view("__hash__")
-    };
-
-    const bool is_magic = magic_methods.contains(std::string_view(attr_name));
-    if (!is_magic) {
-        call_function(get_attr(obj, attr_name), args, obj);
-        return;
-    }
-
-    if (parent_it) {
-        call_function(get_attr(parent_it->value, attr_name), args, obj);
-        return;
-    }
-    throw NativeFuncError("NameError",
-        "Undefined method '" + attr_name + "'"
-    );
+    // 统一走get_attr：先查对象自身属性，再沿__parent__链查找
+    // （此前魔术方法只查父链，导致实例自设的__bool__/__add__等与Nil自带方法被静默忽略）
+    call_function(get_attr(obj, attr_name), args, obj);
 }
 
 std::string Vm::obj_to_str(model::Object* for_cast_obj) {
@@ -241,8 +301,8 @@ std::string Vm::obj_to_str(model::Object* for_cast_obj) {
     } catch (NativeFuncError& e) {
         call_method(for_cast_obj, "__dstr__", {});
     }
-    auto res = simple_get_and_pop_stack_top();
-    std::string val = model::cast_to_str(res)->val;
+    auto res = get_and_pop_stack_top(); // RAII释放结果引用
+    std::string val = model::cast_to_str(res.get())->val;
     return val;
 }
 
@@ -254,8 +314,8 @@ std::string Vm::obj_to_debug_str(model::Object* for_cast_obj) {
     } catch (NativeFuncError& e) {
         call_method(for_cast_obj, "__str__", {});
     }
-    auto res = simple_get_and_pop_stack_top();
-    std::string val = model::cast_to_str(res) ->val;
+    auto res = get_and_pop_stack_top(); // RAII释放结果引用
+    std::string val = model::cast_to_str(res.get()) ->val;
     return val;
 }
 }

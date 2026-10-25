@@ -1,0 +1,10 @@
+# throw 抛出错误；不加catch时错误会打印traceback并以非零码退出
+fn a ()
+    throw Error("RuntimeError", "foo")
+end
+
+try
+    a()
+catch e (RuntimeError)
+    print("捕获:", e)
+end

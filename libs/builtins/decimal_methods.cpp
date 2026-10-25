@@ -1,3 +1,9 @@
+/**
+ * @file decimal_methods.cpp
+ * @brief Decimal类型的魔术方法实现
+ * @author azhz1107cat
+ * @date 2026-10-25
+ */
 #include "../../src/models/models.hpp"
 #include "../../src/vm/vm.hpp"
 #include "include/builtin_methods.hpp"
@@ -5,7 +11,7 @@
 
 namespace model {
 
-// Decimal.__call__：构造Decimal对象（支持字符串/Int/Decimal初始化）
+// Decimal.__call__：构造Decimal对象（支持字符串/Int/Bool/Decimal初始化）
 Object* decimal_call(Object* self, const List* args) {
     auto a = builtin::get_one_arg(args);
     dep::Decimal val(0);
@@ -22,12 +28,35 @@ Object* decimal_call(Object* self, const List* args) {
     else if (auto d = dynamic_cast<Decimal*>(a)) {
         val = d->val;
     }
-    // 假值（Nil/Bool(false)）初始化为0
-    else if (!kiz::Vm::is_true(a)) {
-        val = dep::Decimal(0);
+    // Bool：True→1 / False→0
+    else if (auto b = dynamic_cast<Bool*>(a)) {
+        val = dep::Decimal(b->val ? 1 : 0);
+    }
+    else {
+        // 其余类型必须显式报错，不能静默得到Decimal(0)
+        throw NativeFuncError("TypeError", "Cannot cast this type to Decimal");
     }
 
     return new Decimal(val);
+}
+
+// Decimal.__mod__：取模（floor语义，与Int.mod一致）
+Object* decimal_mod(Object* self, const List* args) {
+    kiz::Vm::assert_argc(1, args);
+
+    const auto self_dec = dynamic_cast<Decimal*>(self);
+    assert(self_dec != nullptr);
+
+    auto another_dec = dynamic_cast<Decimal*>(args->val[0]);
+    // 与Int混合：转Decimal取模（跨类型行为一致）
+    if (!another_dec) {
+        if (auto another_int = dynamic_cast<Int*>(args->val[0])) {
+            return new Decimal(self_dec->val.mod(dep::Decimal(another_int->val)));
+        }
+        throw NativeFuncError("TypeError", "function Decimal.mod second arg need be Decimal or Int");
+    }
+
+    return new Decimal(self_dec->val.mod(another_dec->val));
 }
 
 // Decimal.__bool__：非零判断（0为false，其余为true）
@@ -230,7 +259,8 @@ Object* decimal_neg(Object* self, const List* args) {
 Object* decimal_hash(Object* self, const List* args) {
     const auto self_dec = dynamic_cast<Decimal*>(self);
     assert(self_dec != nullptr);
-    return new Int(self_dec->val.hash());
+    // 哈希带类型前缀：防止Decimal与Int跨类型哈希撞车
+    return new Int(dep::BigInt(dep::hash_string("Dec:" + self_dec->val.to_string())));
 }
 
 

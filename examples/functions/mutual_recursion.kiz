@@ -1,0 +1,12 @@
+# 注意：kiz自上而下编译，函数体内引用的名字在编译时必须已可见，
+# 因此单文件顶层无法直接写互相递归（前向引用）。用状态机方式实现奇偶判断：
+fn parity(n)
+    is_even = True
+    while n > 0
+        n = n - 1
+        is_even = not is_even
+    end
+    return is_even
+end
+print(parity(10))
+print(parity(7))

@@ -1,0 +1,11 @@
+object Bag
+    fn __getitem__(this, i)
+        return f"item{i}"
+    end
+    fn __setitem__(this, i, v)
+        print(f"set {i} = {v}")
+    end
+end
+bag = create(Bag)
+print(bag[3])
+bag[1] = "x"

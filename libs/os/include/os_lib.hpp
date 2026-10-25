@@ -1,3 +1,9 @@
+/**
+ * @file os_lib.hpp
+ * @brief os标准模块核心定义
+ * @author azhz1107cat
+ * @date 2026-10-25
+ */
 #pragma once
 #include "models/models.hpp"
 

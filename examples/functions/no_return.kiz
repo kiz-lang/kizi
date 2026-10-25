@@ -1,0 +1,5 @@
+fn side_effect
+    print("副作用函数")
+end
+side_effect()
+print(side_effect())

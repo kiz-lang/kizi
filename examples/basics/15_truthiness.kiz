@@ -1,0 +1,8 @@
+vals = [0, 1, "", "s", 0.0, 2.5, [], [1], {}, {"a":1}, False, True]
+for v in vals
+    if v
+        print(type(v), "真")
+    else
+        print(type(v), "假")
+    end
+end

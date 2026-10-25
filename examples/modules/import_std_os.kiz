@@ -1,0 +1,5 @@
+import os
+envs = os.env()
+print(type(envs))
+print(envs.contains("PATH"))
+print(os.cwd() != "")

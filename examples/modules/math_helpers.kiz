@@ -1,0 +1,7 @@
+fn square(x)
+    return x * x
+end
+fn cube(x)
+    return x * square(x)
+end
+E = 2.718

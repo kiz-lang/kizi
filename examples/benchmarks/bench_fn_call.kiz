@@ -1,0 +1,23 @@
+# 基准：函数调用与帧创建/销毁（含参数传递与返回值）
+fn add(a, b)
+    return a + b
+end
+
+WARMUP = 5000
+N = 100000
+
+i = 0
+while i < WARMUP
+    add(i, i)
+    i = i + 1
+end
+
+start = now()
+i = 0
+while i < N
+    add(i, i)
+    i = i + 1
+end
+elapsed = now() - start
+print("fn_call", N, "calls:", elapsed, "ns")
+print("per_call_ns:", elapsed / N)

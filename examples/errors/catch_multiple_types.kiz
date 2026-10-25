@@ -1,0 +1,18 @@
+fn risky(n)
+    if n == 1
+        throw Error("E1", "第一个")
+    end
+    if n == 2
+        throw Error("E2", "第二个")
+    end
+    return "ok"
+end
+for n in [0, 1, 2]
+    try
+        print(risky(n))
+    catch e (E1)
+        print("捕获E1:", e.__msg__)
+    catch e (E2)
+        print("捕获E2:", e.__msg__)
+    end
+end

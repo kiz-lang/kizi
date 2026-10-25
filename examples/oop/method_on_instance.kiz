@@ -1,0 +1,8 @@
+o = create()
+o.val = 10
+o.double = fn(this)
+    return this.val * 2
+end
+print(o.double())
+o.val = 50
+print(o.double())

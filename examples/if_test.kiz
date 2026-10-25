@@ -1,8 +1,0 @@
-a=Int(input(">>>"))
-if a==0
-    print("a is 0")
-else if a==2
-    print("a is 2")
-else
-    print("other num")
-end

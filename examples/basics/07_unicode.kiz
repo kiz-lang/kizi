@@ -1,0 +1,7 @@
+中文 = "世界"
+问候 = fn(名字)
+    return "你好, " + 名字
+end
+print(中文)
+print(问候("kiz"))
+print(len("中文"))

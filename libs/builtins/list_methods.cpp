@@ -1,3 +1,9 @@
+/**
+ * @file list_methods.cpp
+ * @brief List类型的魔术方法与成员方法实现
+ * @author azhz1107cat
+ * @date 2026-10-25
+ */
 #include <format>
 
 #include "../../src/models/models.hpp"
@@ -19,9 +25,13 @@ Object* list_call(Object* self, const List* args) {
         if (res == stop_iter_signal) {
             break;
         }
-        list.push_back(res);
+        list.push_back(res); // 携带压栈时的引用，构造完成后归还
     }
-    return new List(list);
+    auto new_list = new List(list); // 构造内部为每个元素make_ref
+    for (auto e : list) {
+        e->del_ref(); // 归还各元素从操作数栈移交来的引用
+    }
+    return new_list;
 }
 
 // List.__bool__
@@ -88,25 +98,29 @@ Object* list_eq(Object* self, const List* args) {
         return load_false();
     }
     
-    // 逐个比较元素
-    for (size_t i = 0; i < self_list->val.size(); ++i) {
+    // 逐个比较元素（列表在自定义__eq__回调中可能被修改，逐次取size）
+    for (size_t i = 0; i < self_list->val.size() and i < another_list->val.size(); ++i) {
         Object* self_elem = self_list->val[i];
         Object* another_elem = another_list->val[i];
         // 调用 __eq__
         kiz::Vm::call_method(
             self_elem, "__eq__", {another_elem}
         );
-        const auto eq_result = kiz::Vm::simple_get_and_pop_stack_top();
+        const auto eq_result = kiz::Vm::simple_get_and_pop_stack_top(); // 移交引用
 
         // 解析比较结果
         const auto eq_bool = dynamic_cast<Bool*>(eq_result);
-        if (! eq_bool)
+        if (! eq_bool) {
+            eq_result->del_ref();
             throw NativeFuncError("TypeError", "__eq__ method must return Bool type");
-        
+        }
+
         // 任意元素不相等，返回 false
         if (!eq_bool->val) {
+            eq_result->del_ref(); // 归还引用
             return load_false();
         }
+        eq_result->del_ref(); // 归还引用
     }
     
     // 所有元素均相等，返回 true
@@ -156,16 +170,18 @@ Object* list_contains(Object* self, const List* args) {
     
     Object* target_elem = args->val[0];
 
-    // 遍历列表元素，逐个判断是否与目标元素相等
-    for (Object* elem : self_list->val) {
+    // 按下标动态读取：回调中修改列表不会使迭代器失效
+    for (size_t i = 0; i < self_list->val.size(); ++i) {
 
         kiz::Vm::call_method(
-            elem, "__eq__", {target_elem}
+            self_list->val[i], "__eq__", {target_elem}
         );
-        const auto result = kiz::Vm::simple_get_and_pop_stack_top();
+        const auto result = kiz::Vm::simple_get_and_pop_stack_top(); // 移交引用
 
         // 找到匹配元素，立即返回true
-        if (kiz::Vm::is_true(result)) return load_true();
+        bool matched = kiz::Vm::is_true(result);
+        result->del_ref(); // 归还引用
+        if (matched) return load_true();
     }
     
     // 遍历完未找到匹配元素，返回false
@@ -185,8 +201,7 @@ Object* list_append(Object* self, const List* args) {
     self_list->val.push_back(elem_to_add);
     elem_to_add->make_ref();
     
-    // 返回列表自身，支持链式调用
-    self->make_ref();
+    // 返回列表自身（借用指针，由handle_call压栈时持有），支持链式调用
     return self;
 };
 
@@ -215,10 +230,10 @@ Object* list_foreach(Object* self, const List* args) {
     auto self_list = dynamic_cast<List*>(self);
     assert(self_list != nullptr);
 
-    dep::BigInt idx = 0;
-    for (auto e : self_list->val) {
-        kiz::Vm::call_function(func_obj, {e}, nullptr);
-        idx += 1;
+    // 按下标动态读取：回调中修改列表(append等)不会使迭代器失效
+    for (size_t idx = 0; idx < self_list->val.size(); ++idx) {
+        kiz::Vm::call_function(func_obj, {self_list->val[idx]}, nullptr);
+        kiz::Vm::get_and_pop_stack_top(); // 丢弃并释放回调返回值
     }
     return load_nil();
 }
@@ -240,7 +255,10 @@ Object* list_extend(Object* self, const List* args) {
     if (!other_list)
         throw NativeFuncError("TypeError", "The first argument of List.extend must be List type");
 
-    for (auto e: other_list->val) {
+    // 快照另一列表的元素：a.extend(a)时边遍历边追加会无限增长
+    std::vector<Object*> other_elems(other_list->val.begin(), other_list->val.end());
+    for (auto e: other_elems) {
+        e->make_ref(); // self侧列表持有新元素的引用
         self_list->val.push_back(e);
     }
     return load_nil();
@@ -255,6 +273,9 @@ Object* list_pop(Object* self, const List* args) {
     }
     auto back = self_list->val.back();
     self_list->val.pop_back();
+    // 列表对该元素的引用随弹出移交给返回值（native_return_owns），
+    // 若先del_ref再返回，元素可能refc归零被销毁，返回悬垂指针
+    kiz::Vm::native_return_owns = true;
     return back;
 }
 
@@ -262,15 +283,21 @@ Object* list_insert(Object* self, const List* args) {
     auto self_list = dynamic_cast<List*>(self);
     assert(self_list != nullptr);
     kiz::Vm::assert_argc(2, args);
-    if (args->val.size() == 2) {
-        auto value_obj = args->val[0];
-        auto idx_int = dynamic_cast<Int*>(args->val[1]);
-        if (!idx_int)
-            throw NativeFuncError("TypeError", "The first argument of List.setitem must be Int type");
-        auto idx = idx_int->val.to_unsigned_long_long();
-        if (idx < self_list->val.size()) {
-            self_list->val[idx] = value_obj;
-        }
+    auto value_obj = args->val[0];
+    auto idx_int = dynamic_cast<Int*>(args->val[1]);
+    if (!idx_int)
+        throw NativeFuncError("TypeError", "The index argument of List.insert must be Int type");
+    auto idx = idx_int->val.to_unsigned_long_long();
+
+    // 值语义：存储前深拷贝可变值（防止自引用结构）
+    auto new_val = model::copy_if_mutable(value_obj);
+    new_val->make_ref(); // 列表持有新元素
+    if (idx < self_list->val.size()) {
+        // 插入语义：在idx位置前插入，其余元素后移
+        self_list->val.insert(self_list->val.begin() + idx, new_val);
+    } else {
+        // 越界等价于追加到末尾
+        self_list->val.push_back(new_val);
     }
     return load_nil();
 }
@@ -288,7 +315,11 @@ Object* list_setitem(Object* self, const List* args) {
     auto value_obj = args->val[1];
 
     if (index < self_list->val.size()) {
-        self_list->val[index] = value_obj;
+        // 值语义：存储前深拷贝可变值（防止a[0] = a构造自引用结构）
+        auto new_val = model::copy_if_mutable(value_obj);
+        self_list->val[index]->del_ref(); // 释放被覆盖的旧元素
+        new_val->make_ref(); // 列表持有新元素
+        self_list->val[index] = new_val;
         return load_nil();
     }
     throw NativeFuncError("SetItemError", std::format("index {} out of range", index));
@@ -312,10 +343,15 @@ Object* list_count(Object* self, const List* args) {
     size_t count = 0;
     auto self_list = cast_to_list(self);
 
-    for (const auto& item : self_list->val) {
-        kiz::Vm::call_method(obj, "__eq__", {item});
-        auto res = kiz::Vm::simple_get_and_pop_stack_top();
-        if (res) {
+    for (size_t idx = 0; idx < self_list->val.size(); ++idx) {
+        kiz::Vm::call_method(obj, "__eq__", {self_list->val[idx]});
+        auto res = kiz::Vm::simple_get_and_pop_stack_top(); // 移交引用
+        bool matched = false;
+        if (const auto res_bool = dynamic_cast<Bool*>(res)) {
+            matched = res_bool->val; // 比较结果为Bool值，而非指针本身是否为空
+        }
+        res->del_ref(); // 归还引用
+        if (matched) {
             ++ count;
         }
     }
@@ -328,12 +364,13 @@ Object* list_find(Object* self, const List* args) {
     auto self_list = dynamic_cast<List*>(self);
     assert(self_list != nullptr);
 
-    for (auto e : self_list->val) {
-        kiz::Vm::call_function(func_obj, {e}, nullptr);
-        auto res = kiz::Vm::simple_get_and_pop_stack_top();
-        if (kiz::Vm::is_true(res)) {
-            res->make_ref();
-            return res;
+    for (size_t idx = 0; idx < self_list->val.size(); ++idx) {
+        kiz::Vm::call_function(func_obj, {self_list->val[idx]}, nullptr);
+        auto res = kiz::Vm::simple_get_and_pop_stack_top(); // 移交引用
+        bool matched = kiz::Vm::is_true(res);
+        res->del_ref(); // 归还谓词结果的引用
+        if (matched) {
+            return self_list->val[idx]; // 返回命中的元素（列表持有，借用返回）
         }
     }
     return load_nil();
@@ -347,13 +384,17 @@ Object* list_map(Object* self, const List* args) {
 
     std::vector<Object*> new_vec;
 
-    for (auto e : self_list->val) {
-        kiz::Vm::call_function(func_obj, {e}, nullptr);
-        auto res = kiz::Vm::simple_get_and_pop_stack_top();
-        
+    for (size_t idx = 0; idx < self_list->val.size(); ++idx) {
+        kiz::Vm::call_function(func_obj, {self_list->val[idx]}, nullptr);
+        auto res = kiz::Vm::simple_get_and_pop_stack_top(); // 移交引用
+
         new_vec.push_back(res);
     }
-    return new List(new_vec);
+    auto new_list = new List(new_vec); // 构造内部为每个元素make_ref
+    for (auto r : new_vec) {
+        r->del_ref(); // 归还各回调结果从操作数栈移交来的引用
+    }
+    return new_list;
 }
 
 Object* list_filter(Object* self, const List* args) {
@@ -364,11 +405,13 @@ Object* list_filter(Object* self, const List* args) {
 
     std::vector<Object*> new_vec;
 
-    for (auto e : self_list->val) {
-        kiz::Vm::call_function(func_obj, {e}, nullptr);
-        auto res = kiz::Vm::simple_get_and_pop_stack_top();
-        if (kiz::Vm::is_true(res)) {
-            new_vec.push_back(res);
+    for (size_t idx = 0; idx < self_list->val.size(); ++idx) {
+        kiz::Vm::call_function(func_obj, {self_list->val[idx]}, nullptr);
+        auto res = kiz::Vm::simple_get_and_pop_stack_top(); // 移交引用
+        bool matched = kiz::Vm::is_true(res);
+        res->del_ref(); // 归还谓词结果的引用
+        if (matched) {
+            new_vec.push_back(self_list->val[idx]); // 保留命中元素，List构造时统一持有
         }
     }
     return new List(new_vec);
@@ -388,8 +431,9 @@ Object* list_join(Object* self, const List* args) {
 
     std::string text;
     size_t index = 0;
-    for (auto item: self_list->val) {
-        text += kiz::Vm::obj_to_str(item);
+    // 按下标动态读取：自定义__str__回调可能修改列表
+    for (size_t idx = 0; idx < self_list->val.size(); ++idx) {
+        text += kiz::Vm::obj_to_str(self_list->val[idx]);
         if (index != self_list->val.size()-1) {
             text += sep;
         }

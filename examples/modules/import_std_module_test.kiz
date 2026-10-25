@@ -1,0 +1,6 @@
+# 标准库模块与本地目录模块
+import os
+print(type(os) == type(os))
+
+import Hello at "Hello/__main__.kiz"
+Hello.hello()

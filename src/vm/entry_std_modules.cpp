@@ -1,3 +1,9 @@
+/**
+ * @file entry_std_modules.cpp
+ * @brief C++实现的标准库模块注册入口
+ * @author azhz1107cat
+ * @date 2026-10-25
+ */
 #include "../models/models.hpp"
 #include "builtins/include/builtins_lib.hpp"
 #include "os/include/os_lib.hpp"

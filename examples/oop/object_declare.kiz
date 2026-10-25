@@ -1,0 +1,15 @@
+object Point
+    x = 0
+    y = 0
+    fn move(this, dx, dy)
+        this.x = this.x + dx
+        this.y = this.y + dy
+        return this
+    end
+    fn show(this)
+        return f"({this.x}, {this.y})"
+    end
+end
+p = create(Point).move(1, 2).move(3, 4)
+print(p.show())
+print(p.x, p.y)

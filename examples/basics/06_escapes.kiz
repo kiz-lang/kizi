@@ -1,0 +1,5 @@
+print("line1\nline2")
+print("tab:\tend")
+print("quote:\"q\"")
+print("uni:\u4e2d\u6587")
+print("backslash:\\")

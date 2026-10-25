@@ -1,0 +1,6 @@
+print(7 + 3, 7 - 3, 7 * 3)
+print(7 / 3)
+print(7 % 3, -7 % 3, 7 % -3)
+print(2 ^ 10)
+print(-2 ^ 2)
+print(Int(7 / 3))

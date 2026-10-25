@@ -3,3 +3,5 @@
 .xmake
 .vscode
 cmake-build-debug
+target/
+mcpp.lock

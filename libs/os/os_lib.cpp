@@ -1,3 +1,9 @@
+/**
+ * @file os_lib.cpp
+ * @brief os标准模块核心实现（环境变量/工作目录/文件系统操作）
+ * @author azhz1107cat
+ * @date 2026-10-25
+ */
 #include "include/os_lib.hpp"
 
 #include <chrono>
@@ -36,14 +42,16 @@ model::Object* init_module(model::Object* self, const model::List* args) {
 
 model::Object* get_args(model::Object* self, const model::List* args) {
     kiz::Vm::assert_argc(0, args);
-    auto argv = new model::List({});
+    std::vector<model::Object*> argv_elems;
     for (auto c: rest_argv) {
-        argv->val.push_back(new model::String(c));
+        argv_elems.push_back(new model::String(c));
     }
-    return argv;
+    return new model::List(argv_elems); // 构造内部为每个元素make_ref
 }
 
 model::Object* get_env(model::Object* self, const model::List* args) {
+    // 参数校验放在try外：避免ArgCountError被包成误导性的SystemError
+    kiz::Vm::assert_argc(0, args);
     try {
         std::vector<std::pair<dep::BigInt, std::pair<model::Object*, model::Object*>>> elem_list;
         if (args->val.empty()) {
@@ -83,10 +91,8 @@ model::Object* get_env(model::Object* self, const model::List* args) {
             // 返回字典类型的Object（基于你定义的make_dict）
             return new model::Dictionary(dep::Dict(elem_list));
         }
-        kiz::Vm::assert_argc(0, args);
     } catch (const std::exception& e) {
         throw NativeFuncError("SystemError",std::format("Error in get environment vars: {}", e.what()));
-        return model::load_nil();
     }
 }
 
@@ -134,8 +140,12 @@ model::Object* mkdir_(model::Object* self, const model::List* args) {
         auto name_obj = builtin::get_one_arg(args);
         auto name = model::cast_to_str(name_obj)->val;
 
+        // 相对路径以当前脚本目录为基准（与open一致）
+        auto real_path = std::filesystem::absolute(
+            kiz::Vm::get_current_file_path().parent_path() / name);
+
         // 创建目录（递归创建，如 mkdir -p）
-        std::filesystem::create_directories(name);
+        std::filesystem::create_directories(real_path);
         return model::load_nil();
     } catch (const std::exception& e) {
         throw NativeFuncError("SystemError", std::format("Error in mkdir: {}" , e.what()));
@@ -149,16 +159,20 @@ model::Object* rmdir(model::Object* self, const model::List* args) {
         auto name_obj = builtin::get_one_arg(args);
         auto name = model::cast_to_str(name_obj)->val;
 
+        // 相对路径以当前脚本目录为基准（与open一致）
+        auto real_path = std::filesystem::absolute(
+            kiz::Vm::get_current_file_path().parent_path() / name);
+
         // 检查目录是否存在且为空
-        if (!std::filesystem::is_directory(name)) {
+        if (!std::filesystem::is_directory(real_path)) {
             throw NativeFuncError("SystemError", name + " is not a directory");
         }
-        if (!std::filesystem::is_empty(name)) {
+        if (!std::filesystem::is_empty(real_path)) {
             throw NativeFuncError("SystemError", name + " is not empty");
         }
 
         // 删除空目录
-        std::filesystem::remove(name);
+        std::filesystem::remove(real_path);
         return model::load_nil();
     } catch (const std::exception& e) {
         throw NativeFuncError("SystemError", std::format("Error in rmdir: {}" , e.what()));
@@ -171,11 +185,15 @@ model::Object* remove(model::Object* self, const model::List* args) {
         auto name_obj = builtin::get_one_arg(args);
         auto name = model::cast_to_str(name_obj)->val;
 
+        // 相对路径以当前脚本目录为基准（与open一致），否则remove静默no-op很难察觉
+        auto real_path = std::filesystem::absolute(
+            kiz::Vm::get_current_file_path().parent_path() / name);
+
         // 删除文件（若要删除目录，需用 remove_all，但需谨慎）
-        if (std::filesystem::is_directory(name)) {
+        if (std::filesystem::is_directory(real_path)) {
             throw NativeFuncError("SystemError",name + " is a directory (use rmdir instead)");
         }
-        std::filesystem::remove(name);
+        std::filesystem::remove(real_path);
         return model::load_nil();
     } catch (const std::exception& e) {
         throw NativeFuncError("SystemError", std::format("Error in remove: {}" , e.what()));

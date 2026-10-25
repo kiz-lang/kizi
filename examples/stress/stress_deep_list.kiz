@@ -1,0 +1,25 @@
+# 压力：单个超大列表（append/下标/遍历）
+N = 100000
+xs = []
+i = 0
+while i < N
+    xs.append(i)
+    i = i + 1
+end
+print("built:", len(xs))
+
+total = 0
+i = 0
+while i < N
+    total = total + xs[i]
+    i = i + 1
+end
+print("indexed sum:", total == (N - 1) * N / 2 or total == 4999950000)
+
+found = 0
+for x in xs
+    if x == N - 1
+        found = 1
+    end
+end
+print("for-scan found last:", found == 1)
