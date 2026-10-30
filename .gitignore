@@ -9,3 +9,4 @@ mcpp.lock
 .idea/
 compile_commands.json
 private/
+.zcode/
