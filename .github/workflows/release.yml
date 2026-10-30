@@ -21,8 +21,9 @@ jobs:
             platform: linux-x64
           - os: macos-latest
             platform: macos-arm64
-          - os: macos-13
+          - os: macos-latest
             platform: macos-x64
+            extra_flags: -DCMAKE_OSX_ARCHITECTURES=x86_64
           - os: windows-latest
             platform: windows-x64
 
@@ -43,7 +44,7 @@ jobs:
 
       # CMake 配置（Release模式；版本号从仓库VERSION文件读取）
       - name: CMake Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.extra_flags }}
 
       # 编译（Windows为多配置生成器，需--config指定）
       - name: Build
