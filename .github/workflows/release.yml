@@ -7,6 +7,10 @@ on:
     types: [published]
   workflow_dispatch:
 
+# 上传Release资产需要GITHUB_TOKEN的写权限（仓库默认workflow权限为read）
+permissions:
+  contents: write
+
 jobs:
   package:
     strategy:
