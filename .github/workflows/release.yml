@@ -1,0 +1,98 @@
+name: Release Kiz (Multi-Platform)
+
+# 发布Release时编译各平台二进制并打包上传到Release资产
+# 也支持手动触发（Actions页面Run workflow），手动运行时产物上传为workflow artifact供检查
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x64
+          - os: macos-latest
+            platform: macos-arm64
+          - os: macos-13
+            platform: macos-x64
+          - os: windows-latest
+            platform: windows-x64
+
+    runs-on: ${{ matrix.os }}
+    name: Package ${{ matrix.platform }}
+
+    steps:
+      # 拉取代码
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Windows 启用 MSVC 环境
+      - name: Setup MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      # CMake 配置（Release模式；版本号从仓库VERSION文件读取）
+      - name: CMake Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      # 编译（Windows为多配置生成器，需--config指定）
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      # 构建产物健全性检查
+      - name: Sanity Check (Unix)
+        if: runner.os != 'Windows'
+        run: ./build/kiz.elf version
+
+      - name: Sanity Check (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: build/Release/kiz.exe version
+
+      # 打包：二进制 + examples/ + docs/ + modules/（zip根目录平铺，Unix用kiz.elf，Windows用kiz.exe）
+      # 用python zipfile打包：为中文文件名写入UTF-8标志位(EFS)，保证Windows解压不乱码
+      # （注意：此方式不保留可执行权限位，Unix用户解压后需 chmod +x kiz.elf）
+      - name: Package (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          VERSION=$(tr -d '[:space:]' < VERSION)
+          ZIP_NAME="kiz-${VERSION}-${{ matrix.platform }}"
+          mkdir -p staging
+          cp build/kiz.elf staging/
+          cp -r examples docs modules README.md LICENSE staging/
+          python3 -c "import shutil; shutil.make_archive('${ZIP_NAME%.zip}', 'zip', 'staging')"
+          echo "ZIP_NAME=${ZIP_NAME}.zip" >> "$GITHUB_ENV"
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          $zipName = "kiz-$version-${{ matrix.platform }}"
+          New-Item -ItemType Directory -Force staging | Out-Null
+          Copy-Item build/Release/kiz.exe staging/
+          Copy-Item -Recurse examples,docs,modules staging/
+          Copy-Item README.md,LICENSE staging/
+          Compress-Archive -Path staging/* -DestinationPath "$zipName.zip"
+          "ZIP_NAME=$zipName.zip" | Add-Content -Path $env:GITHUB_ENV
+
+      # 发布到Release资产
+      - name: Upload to Release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" "${ZIP_NAME}" --clobber --repo "${{ github.repository }}"
+
+      # 手动触发时上传为workflow artifact（供下载检查，不进Release）
+      - name: Upload Workflow Artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: kiz-package-${{ matrix.platform }}
+          path: ${{ env.ZIP_NAME }}

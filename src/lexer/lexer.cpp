@@ -366,7 +366,6 @@ std::vector<Token> Lexer::tokenize() {
             next(); // 消费第一个字符
 
             TokenType type = TokenType::Unknown;
-            bool manual_emitted = false; // :=别名分支手工产出token的标志
             size_t token_end = char_pos_;
 
             // 检查第二个字符
@@ -404,16 +403,10 @@ std::vector<Token> Lexer::tokenize() {
                     next(); // 消费第二个字符
                     token_end = char_pos_;
                 }
-                else if (c1 == ':' && c2 == '=') {
-                    // := 是 = 的别名写法：token文本统一为"="，与语法层按文本匹配保持一致
-                    next(); // 消费第二个字符
-                    tokens_.emplace_back(TokenType::Assign, "=", start_lno, start_col);
-                    manual_emitted = true; // 已手工产token，跳过通用emit
-                }
             }
 
-            // 单字符运算符（:=已手工产出时跳过）
-            if (type == TokenType::Unknown and !manual_emitted) {
+            // 单字符运算符
+            if (type == TokenType::Unknown) {
                 token_end = char_pos_; // 只消费了一个字符
                 if (c1 == '=') type = TokenType::Assign;
                 else if (c1 == '!') type = TokenType::ExclamationMark;
@@ -423,9 +416,7 @@ std::vector<Token> Lexer::tokenize() {
                 else if (c1 == '-') type = TokenType::Minus;
             }
 
-            if (!manual_emitted) {
-                emit_token(type, start_char, token_end, start_lno, start_col, lineno_, col_ - 1);
-            }
+            emit_token(type, start_char, token_end, start_lno, start_col, lineno_, col_ - 1);
             curr_state_ = LexState::Start;
             break;
         }
