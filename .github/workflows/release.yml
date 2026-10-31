@@ -95,7 +95,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           # 额外上传固定名副本：kiz.i2pl.com 的下载按钮使用 latest/download 固定直链（无版本号）
-          FIXED_NAME=$(echo "${ZIP_NAME}" | sed -E 's/^kiz-[0-9.]+-//')
+          FIXED_NAME="kiz-${{ matrix.platform }}.zip"
           cp "${ZIP_NAME}" "${FIXED_NAME}"
           gh release upload "${{ github.event.release.tag_name }}" "${ZIP_NAME}" "${FIXED_NAME}" --clobber --repo "${{ github.repository }}"
 
