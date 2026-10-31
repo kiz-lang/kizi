@@ -8,6 +8,6 @@
 #pragma once
 
 #define KIZ_VERSION_MAJOR 0
-#define KIZ_VERSION_MINOR 10
+#define KIZ_VERSION_MINOR 11
 #define KIZ_VERSION_PATCH 0
-#define KIZ_VERSION "0.10.0"
+#define KIZ_VERSION "0.11.0"
