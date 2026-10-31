@@ -1,0 +1,14 @@
+fn make_counter
+    n = 0
+    fn inc
+        n = n + 1
+        return n
+    end
+    fn get
+        return n
+    end
+    return [inc, get]
+end
+c = make_counter()
+print(c[0](), c[0](), c[0]())
+print(c[1]())
