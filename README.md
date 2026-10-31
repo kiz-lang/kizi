@@ -58,9 +58,9 @@ kiz-lang 是一门 **语法优雅**、面向对象（原型链模型）、动态
 ## 📃 TODO
 - 优化位置信息储存, 完善GC
 
-## 🪄 在线体验(已死，更换新链接中(逃))
-- **官网**: [kiz.random321.com](http://kiz.random321.com)
-- **在线运行代码**: [try.kiz.random321.com](http://try.kiz.random321.com)
+## 🪄 在线体验
+- **官网**: [kiz.i2pl.com](https://kiz.i2pl.com)
+- **在线运行代码**: [try.kiz.i2pl.com](https://try.kiz.i2pl.com)
 
 ## 📧 联系
 kiz-lang@outlook.com
