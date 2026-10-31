@@ -21,8 +21,10 @@ namespace builtin {
 
 model::Object* print(model::Object* self, const model::List* args) {
     dep::UTF8String text;
-    for (auto arg : args->val) {
-        text += dep::UTF8String(kiz::Vm::obj_to_str(arg)) + " ";
+    // 空格是参数分隔符：单参数不再尾随空格（Quine等精确输出场景需要）
+    for (size_t pi = 0; pi < args->val.size(); ++pi) {
+        text += dep::UTF8String(kiz::Vm::obj_to_str(args->val[pi]));
+        if (pi + 1 < args->val.size()) text += " ";
     }
 #ifdef __EMSCRIPTEN__
     // wasm环境：直接桥接到JS的Module.print（stdio链路在wasm下被全缓冲，不可靠）
@@ -529,6 +531,26 @@ model::Object* repeat(model::Object* self, const model::List* args) {
     }
 
     return new model::List(new_vec);
+}
+
+// chr：码点 -> 单字符字符串
+model::Object* chr(model::Object* self, const model::List* args) {
+    kiz::Vm::assert_argc(1, args);
+    auto n = model::cast_to_int(args->val[0]);
+    auto code = n->val.to_unsigned_long_long();
+    if (code > 0x10FFFF || (code >= 0xD800 && code <= 0xDFFF))
+        throw NativeFuncError("ValueError", "chr(): invalid code point");
+    return new model::String(dep::UTF8Char(static_cast<uint32_t>(code)).to_string());
+}
+
+// ord：单字符字符串 -> 码点
+model::Object* ord(model::Object* self, const model::List* args) {
+    kiz::Vm::assert_argc(1, args);
+    auto s = model::cast_to_str(args->val[0]);
+    auto str = dep::UTF8String(s->val);
+    if (str.size() != 1)
+        throw NativeFuncError("ValueError", "ord(): expected a single-character string");
+    return new model::Int(dep::BigInt(static_cast<unsigned long long>(str[0].to_cod_point())));
 }
 
 model::Object* len(model::Object* self, const model::List* args) {

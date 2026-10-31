@@ -1,0 +1,9 @@
+s = "q = chr(34)\nbs = chr(92)\nnl = chr(10)\nesc = s\nesc = esc.replace(bs, bs + bs)\nesc = esc.replace(nl, bs + \"n\")\nesc = esc.replace(q, bs + q)\nprint(\"s = \" + q + esc + q + nl + s)"
+q = chr(34)
+bs = chr(92)
+nl = chr(10)
+esc = s
+esc = esc.replace(bs, bs + bs)
+esc = esc.replace(nl, bs + "n")
+esc = esc.replace(q, bs + q)
+print("s = " + q + esc + q + nl + s)

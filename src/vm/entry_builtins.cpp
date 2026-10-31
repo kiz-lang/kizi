@@ -143,6 +143,7 @@ void Vm::entry_builtins() {
 
     model::based_str->attrs_insert("contains", model::create_nfunc(model::str_contains));
     model::based_str->attrs_insert("find", model::create_nfunc(model::str_find));
+    model::based_str->attrs_insert("replace", model::create_nfunc(model::str_replace));
     model::based_str->attrs_insert("count", model::create_nfunc(model::str_count));
     model::based_str->attrs_insert("foreach", model::create_nfunc(model::str_foreach));
     model::based_str->attrs_insert("startswith", model::create_nfunc(model::str_startswith));
@@ -202,6 +203,8 @@ void Vm::entry_builtins() {
     builtin_insert("type_of", model::create_nfunc(builtin::type_of_obj, "type_of"));
     builtin_insert("type", model::create_nfunc(builtin::type_of_obj, "type"));
     builtin_insert("len", model::create_nfunc(builtin::len, "len"));
+    builtin_insert("chr", model::create_nfunc(builtin::chr, "chr"));
+    builtin_insert("ord", model::create_nfunc(builtin::ord, "ord"));
     builtin_insert("debug_str", model::create_nfunc(builtin::debug_str, "debug_str"));
     builtin_insert("attr", model::create_nfunc(builtin::attr, "attr"));
     builtin_insert("sleep", model::create_nfunc(builtin::sleep, "sleep"));

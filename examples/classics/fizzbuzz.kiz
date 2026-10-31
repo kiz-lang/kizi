@@ -1,0 +1,13 @@
+# FizzBuzz: 经典筛选题, 检验条件分支与取模运算
+# 1-100: 3的倍数打印Fizz, 5的倍数打印Buzz, 同时是3和5的倍数打印FizzBuzz
+for n in range(1, 101)
+    if n % 15 == 0
+        print(n, "FizzBuzz")
+    else if n % 3 == 0
+        print(n, "Fizz")
+    else if n % 5 == 0
+        print(n, "Buzz")
+    else
+        print(n)
+    end
+end

@@ -1,0 +1,23 @@
+# The Twelve Days of Christmas: 1960年代测试Algol 60编译器的经典用例
+# 嵌套循环 + 列表索引 + 字符串拼接
+
+gifts = ["", "a partridge in a pear tree", "two turtle doves",
+         "three french hens", "four calling birds", "five golden rings",
+         "six geese a-laying", "seven swans a-swimming",
+         "eight maids a-milking", "nine ladies dancing",
+         "ten lords a-leaping", "eleven pipers piping", "twelve drummers drumming"]
+days = ["first", "second", "third", "fourth", "fifth", "sixth", "seventh",
+        "eighth", "ninth", "tenth", "eleventh", "twelfth"]
+
+for day in range(1, 13)
+    print("On the " + days[day - 1] + " day of Christmas, my true love gave to me:")
+    # 从当前天倒序唱到第一天 (最早的一天最后唱)
+    for i in range(day, -1, -1)
+        gift = gifts[i]
+        if i == 1 and day != 1
+            gift = "and " + gift
+        end
+        print(gift)
+    end
+    print("")
+end

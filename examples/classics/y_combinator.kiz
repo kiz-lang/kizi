@@ -1,0 +1,38 @@
+# Y组合子 (应用序版本, 即Z组合子):
+#   Y = λf.(λx. f (λv. x x v)) (λx. f (λv. x x v))
+# 在没有函数名的纯匿名函数世界里实现递归 —— 函数式编程的圣杯
+# kiz的闭包(共享Cell)与高阶函数让它可以逐字对应Lambda演算写法
+
+# Z组合子：X(X)完成自应用，thunk里的x(x)(v)随X的捕获递归展开
+Z = fn (f)
+    X = fn (x)
+        return f(fn (v)
+            return x(x)(v)
+        end)
+    end
+    return X(X)
+end
+
+# 用Z组合子构造匿名递归阶乘: fact = Z(λfact. λn. if n<=0 then 1 else n*fact(n-1))
+fact_gen = fn (fact)
+    return fn (n)
+        if n <= 0
+            return 1
+        end
+        return n * fact(n - 1)
+    end
+end
+
+factorial = Z(fact_gen)
+print(factorial(0), factorial(1), factorial(5), factorial(10))
+
+# 同样方式构造匿名递归斐波那契
+fib = Z(fn (f)
+    return fn (n)
+        if n < 2
+            return n
+        end
+        return f(n - 1) + f(n - 2)
+    end
+end)
+print(fib(0), fib(1), fib(10), fib(20))

@@ -1,0 +1,62 @@
+# Brainfuck 解释器: 用kiz实现那门只有8个字符的图灵完备语言
+# 解释经典 "Hello World!" 程序
+code = "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++."
+
+# 括号配对预计算 ([ 与 ] 互相映射)
+tape = []
+for i in range(300)
+    tape.append(0)
+end
+ptr = 0
+pc = 0
+out = ""
+
+# 词法扫描代码收集括号位置
+stack = []
+pairs = {}
+i = 0
+while i < len(code)
+    ch = code[i]
+    if ch == "["
+        stack.append(i)
+    end
+    if ch == "]"
+        open_pos = stack.pop()
+        pairs[open_pos] = i
+        pairs[i] = open_pos
+    end
+    i = i + 1
+end
+
+# 主循环
+while pc < len(code)
+    ch = code[pc]
+    if ch == "+"
+        tape[ptr] = tape[ptr] + 1
+    end
+    if ch == "-"
+        tape[ptr] = tape[ptr] - 1
+    end
+    if ch == ">"
+        ptr = ptr + 1
+    end
+    if ch == "<"
+        ptr = ptr - 1
+    end
+    if ch == "."
+        out = out + chr(tape[ptr])
+    end
+    if ch == "["
+        if tape[ptr] == 0
+            pc = pairs[pc]
+        end
+    end
+    if ch == "]"
+        if tape[ptr] != 0
+            pc = pairs[pc]
+        end
+    end
+    pc = pc + 1
+end
+
+print(out)

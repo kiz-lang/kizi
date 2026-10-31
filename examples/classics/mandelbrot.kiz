@@ -1,0 +1,34 @@
+# 曼德勃罗集: z = z^2 + c 逃逸时间迭代, ASCII渲染
+# 注: kiz的Decimal是无限精度小数, z^2迭代中尾数位数每轮翻倍,
+#     运算开销随迭代深度指数增长, 因此网格与迭代数取保守值 (14x6)
+chars = " .:-=+*#%@"
+width = 14
+height = 6
+max_iter = 12
+
+for py in range(0, height)
+    line = ""
+    ci = py / height * 2.5 - 1.25
+    for px in range(0, width)
+        cr = px / width * 3.5 - 2.5
+        zr = 0.0
+        zi = 0.0
+        iter = 0
+        while iter < max_iter
+            zr2 = zr * zr
+            zi2 = zi * zi
+            if zr2 + zi2 > 4
+                break
+            end
+            zi = 2 * zr * zi + ci
+            zr = zr2 - zi2 + cr
+            iter = iter + 1
+        end
+        if iter == max_iter
+            line = line + "@"
+        else
+            line = line + chars[Int(iter * 10 / max_iter)]
+        end
+    end
+    print(line)
+end

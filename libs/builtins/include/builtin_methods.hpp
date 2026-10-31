@@ -72,6 +72,7 @@ Object* str_add(Object* self, const List* args);
 Object* str_mul(Object* self, const List* args);
 Object* str_contains(Object* self, const List* args);
 Object* str_find(Object* self, const List* args);
+Object* str_replace(Object* self, const List* args);
 Object* str_call(Object* self, const List* args);
 Object* str_bool(Object* self, const List* args);
 Object* str_hash(Object* self, const List* args);

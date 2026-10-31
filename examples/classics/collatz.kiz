@@ -1,0 +1,30 @@
+# 考拉兹猜想 (3n+1问题): 偶数除以2, 奇数乘3加1, 任何正整数最终都会落入 4 -> 2 -> 1
+# 检验整数运算与while循环 (kiz的Int是无限精度整数, 除法用Int(n/2)取整)
+start = 27
+n = start
+steps = 0
+seq = []
+
+while n != 1
+    if n % 2 == 0
+        n = Int(n / 2)
+    else
+        n = 3 * n + 1
+    end
+    seq.append(n)
+    steps = steps + 1
+end
+
+peak = 0
+for v in seq
+    if v > peak
+        peak = v
+    end
+end
+print("Collatz(" + Str(start) + "): " + Str(steps) + " steps to reach 1")
+print("peak:", peak)
+first = ""
+for i in range(0, 10)
+    first = first + Str(seq[i]) + " "
+end
+print("first 10:", first)

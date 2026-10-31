@@ -299,6 +299,29 @@ Object* str_is_digit(Object* self, const List* args) {
 
 }
 
+// String.replace(old, new)：子串替换（UTF-8安全）
+Object* str_replace(Object* self, const List* args) {
+    kiz::Vm::assert_argc(2, args);
+    auto self_str = cast_to_str(self);
+    auto old_str = cast_to_str(args->val[0]);
+    auto new_str = cast_to_str(args->val[1]);
+
+    const std::string& source = self_str->val;
+    const std::string& from = old_str->val;
+    const std::string& to = new_str->val;
+    if (from.empty()) return new String(source);
+
+    std::string out;
+    size_t pos = 0;
+    while (true) {
+        size_t found = source.find(from, pos);
+        if (found == std::string::npos) { out += source.substr(pos); break; }
+        out += source.substr(pos, found - pos) + to;
+        pos = found + from.size();
+    }
+    return new String(out);
+}
+
 Object* str_substr(Object* self, const List* args) {
     auto self_str = cast_to_str(self);
     auto args_vec = args->val;
