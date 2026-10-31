@@ -4,6 +4,9 @@
  * @author azhz1107cat
  * @date 2026-10-25
  */
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 #include "include/builtin_functions.hpp"
 
 #include <chrono>
@@ -21,7 +24,14 @@ model::Object* print(model::Object* self, const model::List* args) {
     for (auto arg : args->val) {
         text += dep::UTF8String(kiz::Vm::obj_to_str(arg)) + " ";
     }
+#ifdef __EMSCRIPTEN__
+    // wasm环境：直接桥接到JS的Module.print（stdio链路在wasm下被全缓冲，不可靠）
+    // 补回C++版endl的换行语义（EM_ASM整段回调，需自带换行）
+    const std::string line = text.to_string() + "\n";
+    EM_ASM({ Module.__printFired = true; if (Module.print) Module.print(UTF8ToString($0)); }, line.c_str());
+#else
     std::cout << text << std::endl;
+#endif
     return model::load_nil();
 }
 
@@ -104,6 +114,10 @@ model::Object* breakpoint(model::Object* self, const model::List* args) {
         std::cout << "Locals: " << "\n";
         for (const auto& n : frame->code_object->var_names) {
             auto l = kiz::Vm::op_stack[frame->bp + j - 1];
+            // 被捕获的槽位装Cell：显示穿透到内部值
+            if (auto cell = dynamic_cast<model::Cell*>(l)) {
+                l = cell->val;
+            }
             // 未赋值的局部槽位跳过而不是对nullptr解引用
             std::cout << n << " = " << (l ? kiz::Vm::obj_to_debug_str(l) : std::string("<unassigned>"));
             if (j<frame->code_object->var_names.size()) std::cout << ", ";

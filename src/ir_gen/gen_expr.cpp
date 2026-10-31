@@ -99,6 +99,9 @@ void IRGenerator::gen_expr(Expr* expr) {
             } else {
                 code_chunks.back().free_names.push_back(ident->name);
                 code_chunks.back().upvalues.push_back({i, name_idx});
+                // 名字属于第 size-1-i 层外层作用域：记入该作用域的被捕获集合，
+                // 由其代码块收尾时在入口装箱为Cell（闭包共享可变状态）
+                code_chunks[code_chunks.size() - 1 - i].captured_locals.insert(name_idx);
                 code_chunks.back().code_list.emplace_back(
                     Opcode::LOAD_FREE_VAR,
                     code_chunks.back().upvalues.size() - 1,
@@ -288,6 +291,9 @@ void IRGenerator::gen_expr(Expr* expr) {
         // }
         // std::cout << "== End ==" << std::endl;
 
+        // 收尾装箱：本作用域被捕获的局部槽位前插MAKE_CELL（共享闭包）
+        finalize_chunk(expr->pos);
+
         auto code_obj = new model::CodeObject(
             code_chunks.back().code_list,
             code_chunks.back().var_names,
@@ -295,7 +301,8 @@ void IRGenerator::gen_expr(Expr* expr) {
             code_chunks.back().free_names,
             code_chunks.back().upvalues,
             code_chunks.back().var_names.size(),
-            code_chunks.back().exception_tables
+            code_chunks.back().exception_tables,
+            code_chunks.size() - 1
         );
         code_chunks.pop_back();
 

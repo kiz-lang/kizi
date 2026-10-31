@@ -13,13 +13,14 @@
 
 #include <string>
 #include <cstring>
+#include <cstdio>
 
 extern "C" {
     // 上一次run_code的错误信息（JS侧通过_get_last_error读取后须立即拷贝）
     static std::string last_error_text;
 
     // 获取上一次run_code的错误信息；无错误返回空串
-    const char* _get_last_error() {
+    const char* get_last_error() {
         return last_error_text.c_str();
     }
 
@@ -38,13 +39,21 @@ extern "C" {
     }
 
     // 运行代码并返回结果
-    const char* run_code(const char* code, int length) {
+    // 单参数接口：按NUL截断取代码（页面JS侧只传code，UTF-8由cstring完整携带）
+    const char* run_code(const char* code) {
         static std::string result;
         static std::string current_path = "<playground#>";
 
         last_error_text.clear();
+        // RAII：无论正常返回还是异常穿出，都保证VM状态清理
+        struct CleanupGuard {
+            ~CleanupGuard() { cleanup_after_run(); }
+        } cleanup_guard;
         try {
-            std::string content(code, length);
+            std::string content(code);
+            // Vm构造必须先于IR生成：entry_builtins在构造时注册内置函数表，
+            // 顺序颠倒会让Identifier解析时builtin_names为空（print等全部NameError）
+            kiz::Vm vm(current_path);
             kiz::Lexer lexer(current_path);
             kiz::Parser parser(current_path);
             kiz::IRGenerator ir_gen(current_path);
@@ -58,15 +67,15 @@ extern "C" {
             kiz::Vm::set_main_module(module);
             kiz::Vm::exec_curr_code();
 
-            cleanup_after_run(); // 清理残留帧与栈引用，保证下次run_code从干净状态开始
+            // wasm下musl的stdout是全缓冲：C++层的flush只把数据送进musl缓冲，
+            // 必须fflush C层stdout，print输出才会经fd_write到达JS的print回调
+            std::fflush(stdout);
 
             result = "Success";
         } catch (const KizStopRunningSignal& e) {
-            cleanup_after_run();
             result = std::string("A Panic! : ") + e.what();
             last_error_text = e.what();
         } catch (...) {
-            cleanup_after_run();
             result = "Unknown error";
             last_error_text = "Unknown error";
         }

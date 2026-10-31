@@ -26,7 +26,7 @@ enum class Opcode : uint8_t {
     SET_GLOBAL, SET_LOCAL, SET_NONLOCAL,
 
     JUMP, JUMP_IF_FALSE, THROW, 
-    MAKE_LIST, MAKE_DICT,
+    MAKE_LIST, MAKE_DICT, MAKE_CELL, FRESH_CELL,
     IMPORT,
     LOAD_ERROR,
     CACHE_ITER, GET_ITER, POP_ITER, JUMP_IF_FINISH_ITER,
@@ -88,6 +88,8 @@ inline std::string opcode_to_string(Opcode opc) {
     // 容器创建
     case Opcode::MAKE_LIST:   return "MAKE_LIST";
     case Opcode::MAKE_DICT:   return "MAKE_DICT";
+    case Opcode::MAKE_CELL:   return "MAKE_CELL";
+    case Opcode::FRESH_CELL:  return "FRESH_CELL";
 
     case Opcode::CACHE_ITER: return "CACHE_ITER";
     case Opcode::GET_ITER:    return "GET_ITER";

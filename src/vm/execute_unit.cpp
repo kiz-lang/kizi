@@ -186,27 +186,67 @@ void Vm::execute_unit(const Instruction& instruction) {
         break;
     }
 
+    case Opcode::MAKE_CELL: {
+        // 把局部槽位装箱为Cell（接管槽位对现有值的引用），槽位改为持有Cell
+        // 幂等：已装箱则跳过（for循环每轮显式重装箱为新Cell实现逐轮独立）
+        size_t offset = call_stack.back()->bp + instruction.opn;
+        if (dynamic_cast<model::Cell*>(op_stack[offset])) {
+            break;
+        }
+        auto cell = new model::Cell(op_stack[offset]); // 接管槽位对旧值的引用
+        cell->make_ref();                              // 槽位持有Cell
+        op_stack[offset] = cell;
+        break;
+    }
+
+    case Opcode::FRESH_CELL: {
+        // 为循环变量无条件换新空Cell：旧Cell若有闭包持有则完整保留（逐轮独立捕获）
+        // 随后的SET_LOCAL向新Cell写入本轮值
+        size_t offset = call_stack.back()->bp + instruction.opn;
+        if (op_stack[offset]) {
+            op_stack[offset]->del_ref();
+        }
+        auto cell = new model::Cell(nullptr);
+        cell->make_ref();
+        op_stack[offset] = cell;
+        break;
+    }
+
     case Opcode::CREATE_CLOSURE: {
         auto func_obj = dynamic_cast<model::Function*>(op_stack.back());
         assert(func_obj != nullptr);
 
         auto& upvalues = func_obj->code->upvalues;
 
-        // 克隆出独立的Function对象持有本次捕获：同一函数定义在循环中
-        // 创建的多个闭包各自持有自己的free_vars，互不覆盖
+        // 克隆出独立的Function对象持有本次捕获：各闭包有自己的free_vars列表，
+        // 但捕获的是外层作用域装箱的Cell指针 → 兄弟闭包共享可变状态
         auto closure = new model::Function(func_obj->name, func_obj->code, func_obj->argc);
         closure->has_rest_params = func_obj->has_rest_params;
 
         std::vector<model::Object*> free_vars {};
         for (const auto& [distance_from_curr, idx] : upvalues) {
-            auto frame = call_stack[ call_stack.size() - distance_from_curr];
-            size_t loc_based = frame->bp;
+            // 按词法层级回溯目标帧：目标chunk深度 = 本闭包scope_depth - distance，
+            // 从栈顶向栈底找最近的活动帧（递归重入时中间夹着更深的帧，固定栈偏移会指错）
+            const size_t target_depth = func_obj->code->scope_depth - distance_from_curr;
+            kiz::CallFrame* def_frame = nullptr;
+            for (auto it = call_stack.rbegin(); it != call_stack.rend(); ++it) {
+                if ((*it)->code_object->scope_depth == target_depth) {
+                    def_frame = *it;
+                    break;
+                }
+            }
+            if (!def_frame) {
+                throw NativeFuncError("NameError", "closure defining scope is not active");
+            }
 
-            auto var = op_stack[loc_based + idx];
-            // 自引用捕获（递归闭包）：捕获克隆自身而不是未捕获的原函数
-            auto captured = (var == func_obj) ? static_cast<model::Object*>(closure) : var;
-            captured->make_ref();
-            free_vars.push_back(captured);
+            auto var = op_stack[def_frame->bp + idx];
+            // 被捕获槽位已在定义作用域入口装箱为Cell；递归自引用时
+            // Cell的值经随后的SET_LOCAL回写自然指向本克隆，无需特判
+            if (!dynamic_cast<model::Cell*>(var)) {
+                throw NativeFuncError("NameError", "closure captured slot was not boxed");
+            }
+            var->make_ref();
+            free_vars.push_back(var);
         }
         closure->free_vars = std::move(free_vars);
 
@@ -325,6 +365,10 @@ void Vm::execute_unit(const Instruction& instruction) {
 
     case Opcode::LOAD_VAR: {
         auto val = op_stack[call_stack.back()->bp + instruction.opn];
+        // 被捕获的槽位装的是Cell，穿透读内部值
+        if (auto cell = dynamic_cast<model::Cell*>(val)) {
+            val = cell->val;
+        }
         // 声明过但尚未赋值的槽位：给出带变量名的可读错误而非晦涩的VM内部错误
         if (!val) {
             const auto& var_names = call_stack.back()->code_object->var_names;
@@ -351,7 +395,15 @@ void Vm::execute_unit(const Instruction& instruction) {
     case Opcode::LOAD_FREE_VAR: {
         auto func = dynamic_cast<model::Function*>(call_stack.back()->owner);
         assert(func != nullptr);
-        push_to_stack(func->free_vars[ instruction.opn ]);
+        // 捕获的是Cell，穿透读内部值
+        auto fv = func->free_vars[ instruction.opn ];
+        if (auto cell = dynamic_cast<model::Cell*>(fv)) {
+            fv = cell->val;
+        }
+        if (!fv) {
+            throw KizStopRunningSignal("Unable to load free var: value not assigned");
+        }
+        push_to_stack(fv);
         break;
     }
 
@@ -361,6 +413,12 @@ void Vm::execute_unit(const Instruction& instruction) {
         size_t offset = call_stack.back()->bp + instruction.opn;
         auto new_val = model::copy_if_mutable(value.get());
         new_val->make_ref();
+
+        // 被捕获的槽位装Cell：写穿透到Cell内部（兄弟闭包共享）
+        if (auto cell = dynamic_cast<model::Cell*>(op_stack[offset])) {
+            cell->set(new_val);
+            break;
+        }
 
         if (op_stack[offset]) {
             op_stack[offset]->del_ref();
@@ -376,6 +434,13 @@ void Vm::execute_unit(const Instruction& instruction) {
 
         auto new_val = model::copy_if_mutable(value.get());
         new_val->make_ref();
+
+        // 全局槽位被闭包捕获时同样是Cell，写穿透
+        if (auto cell = dynamic_cast<model::Cell*>(op_stack[offset])) {
+            cell->set(new_val);
+            break;
+        }
+
         if (op_stack[offset]) {
             op_stack[offset]->del_ref();
         }
@@ -386,29 +451,21 @@ void Vm::execute_unit(const Instruction& instruction) {
 
     case Opcode::SET_NONLOCAL: {
         auto idx_of_upvalue = instruction.opn;
-        auto upvalue = call_stack.back()->code_object->upvalues[ idx_of_upvalue ];
-        auto frame = call_stack[ call_stack.size() - upvalue.distance_from_curr - 1]; // 区别于CREATE_CLOSURE指令, 这里在函数中要多减一
-        size_t loc_based = frame->bp;
+        auto func = dynamic_cast<model::Function*>(call_stack.back()->owner);
+        // 直接写本闭包捕获的Cell：不依赖外层帧存活（修复闭包逃逸后写错帧的问题）
+        if (!func or idx_of_upvalue >= func->free_vars.size()) {
+            throw NativeFuncError("NameError", "nonlocal target variable was not captured");
+        }
+        auto cell = dynamic_cast<model::Cell*>(func->free_vars[idx_of_upvalue]);
+        if (!cell) {
+            throw NativeFuncError("NameError", "nonlocal target variable was not captured as a shared cell");
+        }
 
         auto value = get_and_pop_stack_top();
-
         auto new_val = model::copy_if_mutable(value.get());
-        new_val->make_ref();
+        new_val->make_ref(); // Cell接管此引用
 
-        if (op_stack[loc_based + upvalue.idx]) {
-            op_stack[loc_based + upvalue.idx]->del_ref();
-        }
-
-        op_stack[loc_based + upvalue.idx] = new_val;
-
-        // 更新闭包捕获：释放旧值并持有新值
-        if (auto f = dynamic_cast<model::Function*>(call_stack.back()->owner)) {
-            if (f->free_vars[idx_of_upvalue]) {
-                f->free_vars[idx_of_upvalue]->del_ref();
-            }
-            new_val->make_ref();
-            f->free_vars[idx_of_upvalue] = new_val;
-        }
+        cell->set(new_val);
         break;
     }
 

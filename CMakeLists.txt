@@ -116,9 +116,6 @@ if(BUILD_WASM)
     # 设置Emscripten工具链
     set(CMAKE_TOOLCHAIN_FILE "${EMSCRIPTEN_ROOT_PATH}/cmake/Modules/Platform/Emscripten.cmake")
 
-    # 添加Emscripten包含目录
-    include_directories(${EMSCRIPTEN_ROOT_PATH}/system/include)
-
     # 对于WASM，排除CLI相关文件
     set(WASM_SRC_FILES
             ${SRC_FILES}
@@ -134,7 +131,6 @@ if(BUILD_WASM)
             ${PROJECT_SOURCE_DIR}/src
             ${PROJECT_SOURCE_DIR}/depends
             ${PROJECT_SOURCE_DIR}/libs
-            ${EMSCRIPTEN_ROOT_PATH}/system/include
     )
 
     # 添加预处理器定义
@@ -146,7 +142,7 @@ if(BUILD_WASM)
 
     # Emscripten编译选项
     set_target_properties(kiz_wasm_module PROPERTIES
-            LINK_FLAGS "-s WASM=1 -s MODULARIZE=1 -s EXPORT_ES6=1 -s NO_DISABLE_EXCEPTION_CATCHING -s ALLOW_MEMORY_GROWTH=1 -s EXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8'] -s EXPORTED_FUNCTIONS=['_malloc','_free','_run_code','_allocate_memory','_free_memory','_get_last_error'] -s ENVIRONMENT=web -s EXPORT_NAME='createKizModule'"
+            LINK_FLAGS "-s WASM=1 -s MODULARIZE=1 -s EXPORT_ES6=1 -fexceptions -s ALLOW_MEMORY_GROWTH=1 -s EXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8'] -s EXPORTED_FUNCTIONS=['_malloc','_free','_run_code','_get_last_error'] -s ENVIRONMENT=web -s EXPORT_NAME='createKizModule'"
     )
 
     # 设置输出名称

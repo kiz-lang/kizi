@@ -53,22 +53,8 @@ model::CodeObject* IRGenerator::gen(std::unique_ptr<BlockStmt> ast_into, const s
     }
     gen_block(root_block);
 
-    // std::cout << "== IR Result ==" << std::endl;
-    // size_t i = 0;
-    // for (const auto& inst : code_chunks.back().code_list) {
-    //     std::string opn_text;
-    //     for (auto opn : inst.opn_list) {
-    //         opn_text += std::to_string(opn) + ",";
-    //     }
-    //     std::cout << i << ":" << opcode_to_string(inst.opc) << " " << opn_text << std::endl;
-    //     ++i;
-    // }
-    // std::cout << "== End ==" << std::endl;
-    // std::cout << "== VarName Result ==" << std::endl;
-    // for (auto n: code_chunks.back().var_names) {
-    //     std::cout << n << "\n";
-    // }
-    // std::cout << "== End ==" << std::endl;
+    // 收尾装箱：模块级被捕获的全局槽位（共享闭包）
+    finalize_chunk(root_block->pos);
 
     auto code_obj = new model::CodeObject(
         code_chunks.back().code_list,
@@ -77,10 +63,48 @@ model::CodeObject* IRGenerator::gen(std::unique_ptr<BlockStmt> ast_into, const s
         code_chunks.back().free_names,
         code_chunks.back().upvalues,
         code_chunks.back().var_names.size(),
-        code_chunks.back().exception_tables
+        code_chunks.back().exception_tables,
+        0
     );
 
     return code_obj;
+}
+
+// 代码块收尾：为本作用域被捕获的局部槽位前插MAKE_CELL装箱指令，
+// 并把代码区内全部绝对跳转与异常表pc统一偏移K（前插后所有目标平移K）
+void IRGenerator::finalize_chunk(const err::PositionInfo& pos) {
+    auto& chunk = code_chunks.back();
+    const size_t K = chunk.captured_locals.size();
+    if (K == 0) return;
+
+    // 1. 前插装箱指令（槽位下标有序，装箱顺序无关紧要）
+    std::vector<Instruction> prefix;
+    prefix.reserve(K);
+    err::PositionInfo cell_pos = pos; // Instruction构造收非常量引用，此处拷贝一份
+    for (const size_t slot : chunk.captured_locals) {
+        prefix.emplace_back(Opcode::MAKE_CELL, slot, cell_pos);
+    }
+    chunk.code_list.insert(chunk.code_list.begin(), prefix.begin(), prefix.end());
+
+    // 2. 跳过前缀区，偏移区内全部绝对跳转目标
+    for (size_t pc = K; pc < chunk.code_list.size(); ++pc) {
+        auto& inst = chunk.code_list[pc];
+        if (inst.opc == Opcode::JUMP or inst.opc == Opcode::JUMP_IF_FALSE
+            or inst.opc == Opcode::JUMP_IF_FINISH_ITER) {
+            inst.opn += K;
+        }
+    }
+
+    // 3. 异常表全字段为绝对pc，统一偏移
+    for (auto& table : chunk.exception_tables) {
+        table.try_part_start_pc += K;
+        table.try_part_end_pc += K;
+        table.mismatch_pc += K;
+        // to_vector返回拷贝，需用insert回写
+        for (auto& [name, handle_pc] : table.handle_pc.to_vector()) {
+            table.handle_pc.insert(name, handle_pc + K);
+        }
+    }
 }
 
 model::Int* IRGenerator::make_int_obj(const NumberExpr* num_expr) {

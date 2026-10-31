@@ -54,9 +54,24 @@ void IRGenerator::gen_block(const BlockStmt* block) {
             break;
         }
         case AstType::AssignStmt: {
-            // 变量声明：生成初始化表达式IR + 存储变量指令
+            // 变量赋值：先求值RHS（可能触发对该名字的捕获记录），再存储
             const auto var_decl = dynamic_cast<AssignStmt*>(stmt.get());
-            gen_expr(var_decl->expr.get()); // 生成初始化表达式IR
+            gen_expr(var_decl->expr.get());
+
+            // 名字已被本闭包捕获（自由变量）时赋值上浮：写共享Cell而非创建局部
+            // （Scheme/Lua语义；man_or_boy等经典闭包程序依赖此行为）
+            auto& free_names = code_chunks.back().free_names;
+            if (std::find(free_names.begin(), free_names.end(), var_decl->name) != free_names.end()) {
+                const size_t free_idx = std::distance(free_names.begin(),
+                    std::ranges::find(free_names, var_decl->name));
+                code_chunks.back().code_list.emplace_back(
+                    Opcode::SET_NONLOCAL,
+                    free_idx,
+                    stmt->pos
+                );
+                break;
+            }
+
             const size_t name_idx = get_or_add_name(code_chunks.back().var_names, var_decl->name);
 
             code_chunks.back().code_list.emplace_back(
@@ -325,6 +340,18 @@ size_t IRGenerator::gen_fn_decl(NamedFuncDeclStmt* func) {
     // }
     // std::cout << "== End ==" << std::endl;
 
+    // 收尾装箱：本作用域被捕获的局部槽位前插MAKE_CELL（共享闭包）
+    finalize_chunk(func->pos);
+    if (getenv("KIZ_DUMP")) {
+        std::cerr << "=== fn " << func->name << " (var_names: ";
+        for (auto& n : code_chunks.back().var_names) std::cerr << n << ",";
+        std::cerr << ") ===" << std::endl;
+        size_t pc_i = 0;
+        for (auto& inst : code_chunks.back().code_list) {
+            std::cerr << pc_i++ << ": " << opcode_to_string(inst.opc) << " " << inst.opn << std::endl;
+        }
+    }
+
     auto code_obj = new model::CodeObject(
         code_chunks.back().code_list,
         code_chunks.back().var_names,
@@ -332,7 +359,8 @@ size_t IRGenerator::gen_fn_decl(NamedFuncDeclStmt* func) {
         code_chunks.back().free_names,
         code_chunks.back().upvalues,
         code_chunks.back().var_names.size(),
-        code_chunks.back().exception_tables
+        code_chunks.back().exception_tables,
+        code_chunks.size() - 1
     );
     code_chunks.pop_back();
 
@@ -590,6 +618,13 @@ void IRGenerator::gen_for(ForStmt* for_stmt) {
     );
 
     size_t var_name_idx = get_or_add_name(code_chunks.back().var_names, for_stmt->item_var_name);
+    // 每轮迭代强制为循环变量换新Cell：循环体内创建的闭包捕获“本轮”的值
+    // （Lua for语义；旧Cell保留给前几轮闭包；while循环变量则与外层共享同一Cell）
+    code_chunks.back().code_list.emplace_back(
+        Opcode::FRESH_CELL,
+        var_name_idx,
+        for_stmt->pos
+    );
     code_chunks.back().code_list.emplace_back(
         Opcode::SET_LOCAL,
         var_name_idx,

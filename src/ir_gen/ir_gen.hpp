@@ -11,6 +11,7 @@
 #include "../models/models.hpp"
 
 #include <memory>
+#include <set>
 #include <stack>
 #include <vector>
 
@@ -33,6 +34,8 @@ struct CodeChunk {
     std::vector<model::UpValue> upvalues;
 
     std::vector<model::ExceptionTable> exception_tables;
+    // 被子孙闭包捕获的本作用域局部槽位（装箱为Cell实现共享闭包）
+    std::set<size_t> captured_locals;
 };
 
 class IRGenerator {
@@ -72,6 +75,10 @@ private:
     static model::Int* make_int_obj(const NumberExpr* num_expr);
     static model::Decimal* make_decimal_obj(const DecimalExpr* dec_expr);
     static model::String* make_string_obj(const StringExpr* str_expr);
+
+    ///| 代码块收尾：为本作用域被捕获的局部槽位前插MAKE_CELL装箱指令，
+    ///| 并把代码区内全部绝对跳转与异常表pc统一偏移K（前插后目标平移）
+    void finalize_chunk(const err::PositionInfo& pos);
 };
 
 } // namespace kiz

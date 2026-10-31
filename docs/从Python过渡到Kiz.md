@@ -170,7 +170,7 @@ print(add5(1))               # 6
 与 Python 的差异：
 
 - **方法第一个形参是 self**：任何"通过对象调用"的函数，第一个形参接收调用者对象，惯用名 `this`。
-- **闭包每次创建独立、按值捕获**——Python 的经典陷阱在 kiz 里不存在：
+- **闭包共享捕获变量的单元格(Cell)**——同一作用域创建的闭包共享可变状态："”
   ```
   fns = []
   i = 0
@@ -181,11 +181,28 @@ print(add5(1))               # 6
       fns.append(mk)
       i = i + 1
   end
-  print(fns[0]())    # 0（Python 里同一写法常得 3）
-  print(fns[2]())    # 2
+  print(fns[0]())    # 0（for 循环变量每轮独立，Python 里同一写法常得 3）
+  print(fns[2]())    # 20
   ```
-- **限制**：一个闭包里 `nonlocal` 写入的变量，另一个闭包看不到（捕获的是创建时的快照）。共享状态用 Object。
-- `global x = 1` / `nonlocal x = 1` 用于跨作用域赋值声明。
+- **赋值写共享单元格**：闭包内对捕获变量的赋值自动写回外层（Scheme/Lua 语义），`nonlocal` 关键字可省略（保留兼容）：
+  ```
+  fn make_counter
+      n = 0
+      fn inc
+          n = n + 1       # 直接写，等效 nonlocal n = n + 1
+          return n
+      end
+      fn get
+          return n        # 与 inc 共享同一个 n
+      end
+      return [inc, get]
+  end
+  c = make_counter()
+  c[0]()                  # 1
+  print(c[1]())           # 1（get 看到了 inc 的写入）
+  ```
+- **while 循环变量被捕获时共享**（整个循环一个绑定，Lua 风格）；**for 循环变量每轮独立**。若要在 while 中逐轮独立，把值拷进循环体内的一个新名字。
+- `global x = 1` / `nonlocal x = 1` 用于跨作用域赋值声明（显式形式，可省略）。
 
 ### 面向对象
 

@@ -17,15 +17,16 @@
 namespace dep {
 
 // 字符串哈希函数（FNV-1a算法）
+// 用uint64_t计算：wasm等32位平台size_t放不下FNV偏移量，直接用size_t会被截断退化
 inline size_t hash_string(const std::string& key) {
-    constexpr size_t FNV_OFFSET = 14695981039346656037ULL;
-    constexpr size_t FNV_PRIME = 1099511628211ULL;
-    size_t hash = FNV_OFFSET;
+    constexpr uint64_t FNV_OFFSET = 14695981039346656037ULL;
+    constexpr uint64_t FNV_PRIME = 1099511628211ULL;
+    uint64_t hash = FNV_OFFSET;
     for (const char c : key) {
-        hash ^= static_cast<size_t>(c);  // 异或当前字符
-        hash *= FNV_PRIME;               // 乘以质数
+        hash ^= static_cast<uint64_t>(static_cast<unsigned char>(c)); // 异或当前字符
+        hash *= FNV_PRIME;                                            // 乘以质数
     }
-    return hash;
+    return static_cast<size_t>(hash);
 }
 
 // 模板类：键为std::string，值为任意类型T的HashMap

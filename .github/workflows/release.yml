@@ -93,7 +93,11 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" "${ZIP_NAME}" --clobber --repo "${{ github.repository }}"
+        run: |
+          # 额外上传固定名副本：kiz.i2pl.com 的下载按钮使用 latest/download 固定直链（无版本号）
+          FIXED_NAME=$(echo "${ZIP_NAME}" | sed -E 's/^kiz-[0-9.]+-//')
+          cp "${ZIP_NAME}" "${FIXED_NAME}"
+          gh release upload "${{ github.event.release.tag_name }}" "${ZIP_NAME}" "${FIXED_NAME}" --clobber --repo "${{ github.repository }}"
 
       # 手动触发时上传为workflow artifact（供下载检查，不进Release）
       - name: Upload Workflow Artifact

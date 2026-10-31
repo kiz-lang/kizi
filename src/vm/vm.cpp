@@ -155,6 +155,11 @@ void Vm::exec_curr_code() {
         } catch (KizUnwindSignal&) {
             // 异常已重定向到本循环管理的帧的catch块，pc已就位，直接继续执行
             continue;
+        } catch (const KizStopRunningSignal&) {
+            // 未捕获的kiz错误：traceback已由handle_throw打印，就地终止执行
+            // （不再向宿主层抛C++异常——wasm/REPL等宿主的清理与状态均保持正常）
+            running = false;
+            return;
         }
         ADVANCE_PC
     }

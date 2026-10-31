@@ -85,7 +85,7 @@ public:
     enum class ObjectType {
         Object, Nil, Bool, Int, String, Decimal,
         List, Dictionary, CodeObject, Function,
-        NativeFunction, Module, Error, Unpack
+        NativeFunction, Module, Error, Unpack, Cell
     };
 
     void mark_as_important() {
@@ -171,6 +171,8 @@ public:
     size_t locals_count;
 
     std::vector<ExceptionTable> exception_tables;
+    // 本CodeObject在chunk栈中的词法层级（module=0，直接嵌套+1）；CREATE_CLOSURE按此回溯词法父帧
+    size_t scope_depth = 0;
 
     static constexpr ObjectType TYPE = ObjectType::CodeObject;
     [[nodiscard]] ObjectType get_type() const override { return TYPE; }
@@ -181,9 +183,10 @@ public:
         const std::vector<std::string>& f_n,
         const std::vector<UpValue>& u_v,
         const size_t l_c,
-        std::vector<ExceptionTable> et)
+        std::vector<ExceptionTable> et,
+        const size_t s_d = 0)
             : code(c), var_names(v_n), attr_names(a_n), free_names(f_n), upvalues(u_v), locals_count(l_c),
-                 exception_tables(std::move(et)) {}
+                 exception_tables(std::move(et)), scope_depth(s_d) {}
 
     [[nodiscard]] std::string debug_string() const override {
         return "<CodeObject at " + ptr_to_string(this) + ">";
@@ -467,6 +470,28 @@ public:
         return "fileHandle";
     }
 
+};
+
+class Cell : public Object {
+public:
+    Object* val;
+
+    static constexpr ObjectType TYPE = ObjectType::Cell;
+    [[nodiscard]] ObjectType get_type() const override { return TYPE; }
+
+    // 接管调用方持有的引用（不make_ref）；val可为nullptr表示未赋值
+    explicit Cell(Object* adopted) : val(adopted) {}
+    [[nodiscard]] std::string debug_string() const override {
+        return "<Cell of " + (val ? val->debug_string() : "Nil") + ">";
+    }
+    // 释放旧值引用并接管新值引用
+    void set(Object* adopted) {
+        if (val) val->del_ref();
+        val = adopted;
+    }
+    ~Cell() override {
+        if (val) val->del_ref();
+    }
 };
 
 class Unpack : public Object {

@@ -337,10 +337,15 @@ void Vm::handle_import(const std::string& module_path) {
     }
 
     for (size_t i = call_stack.back()->bp; i < call_stack.back()->bp + call_stack.back()->code_object->locals_count; ++i) {
-        const auto local_object = op_stack[i];
+        auto local_object = op_stack[i];
         const auto name = call_stack.back()->code_object->var_names[i - call_stack.back()->bp];
         if (name.starts_with("__private__")) continue;
         if (!local_object) continue; // 未被赋值过的局部槽位不导出
+        // 被闭包捕获的槽位装Cell：导出时解箱为内部值
+        if (auto cell = dynamic_cast<model::Cell*>(local_object)) {
+            local_object = cell->val;
+        }
+        if (!local_object) continue;
 
         module_obj->attrs_insert(name, local_object);
     }
