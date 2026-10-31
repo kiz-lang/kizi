@@ -103,9 +103,23 @@ std::unique_ptr<BlockStmt> Parser::parse_block(TokenType endswith) {
     return std::make_unique<BlockStmt>(block_tok.pos, std::move(block_stmts));
 }
 
-// parse_if实现
+// parse_if实现：消费链尾的end（对外入口）
 std::unique_ptr<IfStmt> Parser::parse_if() {
+    auto node = parse_if_node();
+    if (curr_token().type == TokenType::End) {
+        skip_end();
+    }
+    return node;
+}
+
+// 解析if链的主体（不消费链尾end）：else if与else由同一链尾end收束，
+// 供for/while体等需要自行消费end的场景正确嵌套
+std::unique_ptr<IfStmt> Parser::parse_if_node() {
     DEBUG_OUTPUT("parsing if");
+    // 兼容两种调用点：parse_stmt已消费if / else-if分支直接从If token开始
+    if (curr_token().type == TokenType::If) {
+        skip_token("if");
+    }
     // 解析if条件表达式
     auto cond_expr = parse_expression();
     if (cond_expr == nullptr)
@@ -126,18 +140,14 @@ std::unique_ptr<IfStmt> Parser::parse_if() {
         skip_token("else");
         skip_start_of_block();
         if (curr_token().type == TokenType::If) {
-            // else if分支
+            // else if分支：直接递归if主体（不消费end，end由最外层统一消费）
             std::vector<std::unique_ptr<Stmt>> else_if_stmts;
-            else_if_stmts.push_back(parse_stmt());
+            else_if_stmts.push_back(parse_if_node());
             else_block = std::make_unique<BlockStmt>(curr_token().pos, std::move(else_if_stmts));
         } else {
             // else分支（无end的块）
             else_block = parse_block();
         }
-    }
-
-    if (curr_token().type == TokenType::End) {
-        skip_end();
     }
 
     return std::make_unique<IfStmt>(if_tok.pos, std::move(cond_expr), std::move(if_block), std::move(else_block));
@@ -172,8 +182,11 @@ std::unique_ptr<Stmt> Parser::parse_stmt() {
     if (curr_tok.type == TokenType::Func) {
         DEBUG_OUTPUT("parsing function");
         auto tok = skip_token("fn");
-        // 读取函数名
-        const std::string func_name = skip_token().text;
+        // 读取函数名；fn后紧跟(为匿名函数（文档支持），此时以占位名走同一解析路径
+        std::string func_name = "<anonymous>";
+        if (curr_token().type != TokenType::LParen) {
+            func_name = skip_token().text;
+        }
 
         // 解析参数列表（()包裹，逻辑不变）
         std::vector<std::string> func_params;

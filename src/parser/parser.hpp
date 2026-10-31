@@ -60,6 +60,7 @@ private:
     std::unique_ptr<Stmt> parse_stmt();
     std::unique_ptr<BlockStmt> parse_block(TokenType endswith = TokenType::End);
     std::unique_ptr<IfStmt> parse_if();
+    std::unique_ptr<IfStmt> parse_if_node();
 
     // parse expr
     std::unique_ptr<Expr> parse_expression();
